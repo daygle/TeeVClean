@@ -21,6 +21,8 @@ import androidx.work.WorkManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -157,8 +159,23 @@ private fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
         Spacer(Modifier.height(62.dp))
         Screen.entries.forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
-        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp)).focusable(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Settings, null, tint = Muted, modifier = Modifier.padding(18.dp).size(18.dp)); Text("Settings", color = Muted, fontSize = 15.sp)
+        val settingsInteractionSource = remember { MutableInteractionSource() }
+        val isSettingsFocused by settingsInteractionSource.collectIsFocusedAsState()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 5.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (isSettingsFocused) PanelLight else Color.Transparent)
+                .border(
+                    if (isSettingsFocused) 2.dp else 0.dp,
+                    if (isSettingsFocused) Lime else Color.Transparent,
+                    RoundedCornerShape(14.dp)
+                )
+                .focusable(interactionSource = settingsInteractionSource),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Settings, null, tint = if (isSettingsFocused) Color.White else Muted, modifier = Modifier.padding(18.dp).size(18.dp)); Text("Settings", color = if (isSettingsFocused) Color.White else Muted, fontSize = 15.sp)
         }
         Text("TV CLEANER  •  v1.0", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
     }
@@ -167,9 +184,25 @@ private fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
 @Composable
 private fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
     val active = screen == selected
-    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp)).background(if (active) PanelLight else Color.Transparent).border(if (active) 1.dp else 0.dp, if (active) Lime.copy(alpha = .35f) else Color.Transparent, RoundedCornerShape(14.dp)).focusable(), verticalAlignment = Alignment.CenterVertically) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isFocused) PanelLight.copy(alpha = 0.8f) else if (active) PanelLight else Color.Transparent)
+            .border(
+                if (isFocused) 2.dp else if (active) 1.dp else 0.dp,
+                if (isFocused) Lime else if (active) Lime.copy(alpha = .35f) else Color.Transparent,
+                RoundedCornerShape(14.dp)
+            )
+            .focusable(interactionSource = interactionSource),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(Modifier.width(4.dp).height(34.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Lime else Color.Transparent))
-        Text(screen.label, color = if (active) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+        Text(screen.label, color = if (active || isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
     }
 }
 
@@ -201,7 +234,23 @@ private fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
 
 @Composable
 private fun FeatureCard(title: String, subtitle: String, badge: String, amount: String) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp).focusable(), verticalAlignment = Alignment.CenterVertically) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (isFocused) PanelLight else Panel)
+            .border(
+                if (isFocused) 2.dp else 0.dp,
+                if (isFocused) Lime else Color.Transparent,
+                RoundedCornerShape(18.dp)
+            )
+            .padding(20.dp)
+            .focusable(interactionSource = interactionSource),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Text(badge.take(1), color = Lime, fontSize = 20.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
     }
 }
