@@ -178,7 +178,7 @@ private fun FeatureCard(title: String, subtitle: String, badge: String, amount: 
 private fun CleanupScreen(onReview: () -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("Safe cleanup", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Text("Scan temporary files and review every item before removal.", color = Muted, fontSize = 16.sp); Spacer(Modifier.height(12.dp))
-        ResultRow("This app's cache", "Safe to remove; app data and user files stay intact", formatBytes(cacheSize()), true)
+        ResultRow("This app's cache", "Safe to remove; app data and user files stay intact", formatBytes(cacheSize(LocalContext.current)), true)
         ResultRow("Other app caches", "Android requires each app's own info page", "Guided", false)
         ResultRow("Downloads and media", "Select files in the large-file review", "User choice", false)
         Spacer(Modifier.height(10.dp)); Button(onClick = onReview) { Text("Review cleanup plan") }
@@ -186,8 +186,8 @@ private fun CleanupScreen(onReview: () -> Unit) {
 }
 
 @Composable
-private fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 14.sp) }; Text(amount, color = if (safe) Lime else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-
+private fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 14.sp) }; Text(amount, color = if (safe) Lime else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -226,11 +226,11 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
 @Composable
 private fun CleanupDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirm safe cleanup") }, text = { Text("Only TeeV Clean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize())}.") }, confirmButton = { Button(onClick = { clearOwnCache(context); onDismiss() }) { Text("Remove cache") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirm safe cleanup") }, text = { Text("Only TeeV Clean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize(LocalContext.current))}.") }, confirmButton = { Button(onClick = { clearOwnCache(context); onDismiss() }) { Text("Remove cache") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 private fun readStorage(): StorageSummary { val stat = StatFs(Environment.getDataDirectory().path); val total = stat.blockCountLong * stat.blockSizeLong; return StorageSummary(total - stat.availableBytes, total) }
-private fun cacheSize(): Long = folderSize(File(System.getProperty("java.io.tmpdir") ?: ""))
+private fun cacheSize(context: Context): Long = folderSize(context.cacheDir)
 private fun clearOwnCache(context: Context) { context.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }
 private fun folderSize(file: File): Long = if (!file.exists()) 0L else if (file.isFile) file.length() else file.listFiles()?.sumOf { folderSize(it) } ?: 0L
 
