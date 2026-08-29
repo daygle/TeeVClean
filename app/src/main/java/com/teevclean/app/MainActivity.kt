@@ -7,17 +7,14 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.app.AppOpsManager
-import android.content.pm.PackageManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +30,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -100,8 +101,8 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                     Spacer(Modifier.width(38.dp))
                     Box(Modifier.weight(1f)) {
                         when (viewModel.currentScreen) {
-                            Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles) { showCleanup = true }
-                            Screen.CLEAN -> CleanupScreen(viewModel.cacheSize, onReview = { showCleanup = true }, onSchedule = { showSchedule = true }, scheduleEnabled = viewModel.scheduleEnabled)
+                            Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, { showCleanup = true }) { viewModel.currentScreen = it }
+                            Screen.CLEAN -> CleanupScreen(viewModel.cacheSize, onReview = { showCleanup = true }, onSchedule = { showSchedule = true }, scheduleEnabled = viewModel.scheduleEnabled) { viewModel.currentScreen = it }
                             Screen.LARGE -> {
                                 if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty()) {
                                     PermissionRationale(
@@ -141,7 +142,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
 }
 
 @Composable
-private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, onClean: () -> Unit) {
+private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, onClean: () -> Unit, onNavigate: (Screen) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item {
             Text(stringResource(R.string.greeting), color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
@@ -151,9 +152,33 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
             StorageCard(storage, onClean)
         }
         item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
-        item { FeatureCard(stringResource(R.string.large_files), stringResource(R.string.feature_large_files_desc), "Files", if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
-        item { FeatureCard(stringResource(R.string.app_review), pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size), "Apps", "Guided") }
-        item { FeatureCard(stringResource(R.string.device_health), stringResource(R.string.feature_device_health_desc), "Health", "Check") }
+        item {
+            FeatureCard(
+                stringResource(R.string.large_files),
+                stringResource(R.string.feature_large_files_desc),
+                "Files",
+                if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size }),
+                Icons.Outlined.FolderOpen
+            ) { onNavigate(Screen.LARGE) }
+        }
+        item {
+            FeatureCard(
+                stringResource(R.string.app_review),
+                pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size),
+                "Apps",
+                "Guided",
+                Icons.Outlined.Apps
+            ) { onNavigate(Screen.APPS) }
+        }
+        item {
+            FeatureCard(
+                stringResource(R.string.device_health),
+                stringResource(R.string.feature_device_health_desc),
+                "Health",
+                "Check",
+                Icons.Outlined.MonitorHeart
+            ) { onNavigate(Screen.HEALTH) }
+        }
         item {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp),
@@ -171,7 +196,7 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
 }
 
 @Composable
-private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () -> Unit, scheduleEnabled: Boolean) {
+private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () -> Unit, scheduleEnabled: Boolean, onNavigate: (Screen) -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(stringResource(R.string.safe_cleanup), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.safe_cleanup_desc), color = Muted, fontSize = 16.sp)
@@ -183,6 +208,9 @@ private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () 
         Button(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
         TextButton(onClick = onSchedule) {
             Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup))
+        }
+        TextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
+            Text(stringResource(R.string.overview))
         }
     }
 }

@@ -5,17 +5,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 
-enum class Screen(val labelRes: Int) {
-    OVERVIEW(R.string.overview),
-    CLEAN(R.string.safe_cleanup),
-    LARGE(R.string.large_files),
-    APPS(R.string.app_review),
-    HEALTH(R.string.device_health),
-    SETTINGS(R.string.settings)
+enum class Screen(val labelRes: Int, val icon: ImageVector) {
+    OVERVIEW(R.string.overview, Icons.Outlined.Dashboard),
+    CLEAN(R.string.safe_cleanup, Icons.Outlined.CleaningServices),
+    LARGE(R.string.large_files, Icons.Outlined.FolderOpen),
+    APPS(R.string.app_review, Icons.Outlined.Apps),
+    HEALTH(R.string.device_health, Icons.Outlined.MonitorHeart),
+    SETTINGS(R.string.settings, Icons.Outlined.Settings)
 }
 
 class TeeVViewModel(application: Application) : AndroidViewModel(application) {

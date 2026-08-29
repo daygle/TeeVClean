@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -87,13 +86,26 @@ fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
             .clickable(onClick = { onSelect(screen) }),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (screen == Screen.SETTINGS) {
-            Icon(Icons.Outlined.Settings, null, tint = if (isFocused || active) Color.White else Muted, modifier = Modifier.padding(start = 18.dp).size(18.dp))
-            Text(stringResource(screen.labelRes), color = if (active || isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp))
-        } else {
-            Box(Modifier.width(4.dp).height(34.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Lime else Color.Transparent))
-            Text(stringResource(screen.labelRes), color = if (active || isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
-        }
+        Box(
+            Modifier
+                .width(4.dp)
+                .height(34.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (active) Lime else Color.Transparent)
+        )
+        Icon(
+            imageVector = screen.icon,
+            contentDescription = null,
+            tint = if (isFocused || active) Color.White else Muted,
+            modifier = Modifier.padding(start = 14.dp).size(18.dp)
+        )
+        Text(
+            stringResource(screen.labelRes),
+            color = if (active || isFocused) Color.White else Muted,
+            fontSize = 15.sp,
+            fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+        )
     }
 }
 
@@ -103,7 +115,14 @@ fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {
 }
 
 @Composable
-fun FeatureCard(title: String, subtitle: String, badge: String, amount: String) {
+fun FeatureCard(
+    title: String,
+    subtitle: String,
+    badge: String,
+    amount: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
@@ -118,10 +137,11 @@ fun FeatureCard(title: String, subtitle: String, badge: String, amount: String) 
                 RoundedCornerShape(18.dp)
             )
             .padding(20.dp)
-            .focusable(interactionSource = interactionSource),
+            .focusable(interactionSource = interactionSource)
+            .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Text(badge.take(1), color = Lime, fontSize = 20.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = Lime, modifier = Modifier.size(22.dp)) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
     }
 }
 
