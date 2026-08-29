@@ -15,6 +15,9 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -57,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 private val Ink = Color(0xFF101311)
 private val Panel = Color(0xFF191E1A)
@@ -91,12 +95,19 @@ private enum class Screen(val label: String) {
 fun TeeVCleanApp(onPickFolder: () -> Unit) {
     var selected by remember { mutableStateOf(Screen.OVERVIEW) }
     var showCleanup by remember { mutableStateOf(false) }
+    var showSchedule by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    var scheduleEnabled by remember { mutableStateOf(isCleanupScheduled(context)) }
     val storage = remember { readStorage() }
     val apps = remember { loadApps(context) }
     val files = remember { scanFiles() }
 
     if (showCleanup) CleanupDialog { showCleanup = false }
+    if (showSchedule) ScheduleDialog(scheduleEnabled, onDismiss = { showSchedule = false }) { enabled ->
+        scheduleEnabled = enabled
+        setCleanupSchedule(context, enabled)
+        showSchedule = false
+    }
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Ink) {
@@ -105,7 +116,7 @@ fun TeeVCleanApp(onPickFolder: () -> Unit) {
                 Spacer(Modifier.width(38.dp))
                 when (selected) {
                     Screen.OVERVIEW -> Dashboard(storage, apps, files) { showCleanup = true }
-                    Screen.CLEAN -> CleanupScreen { showCleanup = true }
+                    Screen.CLEAN -> CleanupScreen(onReview = { showCleanup = true }, onSchedule = { showSchedule = true }, scheduleEnabled = scheduleEnabled)
                     Screen.LARGE -> LargeFilesScreen(files, onPickFolder)
                     Screen.APPS -> AppReviewScreen(apps, context)
                     Screen.HEALTH -> HealthScreen(context, storage)
@@ -120,7 +131,7 @@ private fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
     Column(Modifier.width(210.dp).fillMaxHeight()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Text("✓", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text(" clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(62.dp))
         Screen.entries.forEach { screen -> NavItem(screen, selected, onSelect) }
@@ -175,13 +186,14 @@ private fun FeatureCard(title: String, subtitle: String, badge: String, amount: 
 }
 
 @Composable
-private fun CleanupScreen(onReview: () -> Unit) {
+private fun CleanupScreen(onReview: () -> Unit, onSchedule: () -> Unit, scheduleEnabled: Boolean) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("Safe cleanup", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Text("Scan temporary files and review every item before removal.", color = Muted, fontSize = 16.sp); Spacer(Modifier.height(12.dp))
         ResultRow("This app's cache", "Safe to remove; app data and user files stay intact", formatBytes(cacheSize(LocalContext.current)), true)
         ResultRow("Other app caches", "Android requires each app's own info page", "Guided", false)
         ResultRow("Downloads and media", "Select files in the large-file review", "User choice", false)
         Spacer(Modifier.height(10.dp)); Button(onClick = onReview) { Text("Review cleanup plan") }
+        TextButton(onClick = onSchedule) { Text(if (scheduleEnabled) "Scheduled cleanup: weekly" else "Schedule weekly cleanup") }
     }
 }
 
@@ -224,9 +236,14 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
 }
 
 @Composable
+private fun ScheduleDialog(enabled: Boolean, onDismiss: () -> Unit, onSave: (Boolean) -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Scheduled cleanup") }, text = { Text(if (enabled) "A weekly cleanup will clear only TeeVClean's own cache. Other apps, downloads, photos, and personal files are never touched." else "Schedule a weekly cleanup of TeeVClean's own cache. This does not delete user files or clear other apps' caches.") }, confirmButton = { Button(onClick = { onSave(!enabled) }) { Text(if (enabled) "Turn off" else "Enable") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+@Composable
 private fun CleanupDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirm safe cleanup") }, text = { Text("Only TeeV Clean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize(LocalContext.current))}.") }, confirmButton = { Button(onClick = { clearOwnCache(context); onDismiss() }) { Text("Remove cache") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirm safe cleanup") }, text = { Text("Only TeeVClean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize(LocalContext.current))}.") }, confirmButton = { Button(onClick = { clearOwnCache(context); onDismiss() }) { Text("Remove cache") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 private fun readStorage(): StorageSummary { val stat = StatFs(Environment.getDataDirectory().path); val total = stat.blockCountLong * stat.blockSizeLong; return StorageSummary(total - stat.availableBytes, total) }
@@ -245,6 +262,13 @@ private fun loadApps(context: Context): List<AppSummary> {
     val since = System.currentTimeMillis() - 180L * 24 * 60 * 60 * 1000
     val lastUsed = usage?.queryUsageStats(UsageStatsManager.INTERVAL_MONTHLY, since, System.currentTimeMillis())?.associate { it.packageName to it.lastTimeUsed }.orEmpty()
     return context.packageManager.getInstalledApplications(0).filter { it.packageName != context.packageName }.map { app -> AppSummary(app.loadLabel(context.packageManager).toString(), app.packageName, File(app.sourceDir ?: "").length(), lastUsed[app.packageName] ?: 0L) }.sortedByDescending { it.size }
+}
+
+private fun isCleanupScheduled(context: Context): Boolean = WorkManager.getInstance(context).getWorkInfosForUniqueWork("weekly-cache-cleanup").get().any { !it.state.isFinished }
+
+private fun setCleanupSchedule(context: Context, enabled: Boolean) {
+    val manager = WorkManager.getInstance(context)
+    if (!enabled) manager.cancelUniqueWork("weekly-cache-cleanup") else manager.enqueueUniquePeriodicWork("weekly-cache-cleanup", ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<CleanupWorker>(7, TimeUnit.DAYS).build())
 }
 
 private fun openAppInfo(context: Context, packageName: String) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }

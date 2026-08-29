@@ -1,4 +1,4 @@
-# TeeV Clean
+# TeeVClean
 
 A modern, privacy-first Android TV 11 cleaning assistant optimized for 10-foot viewing and D-pad navigation.
 
