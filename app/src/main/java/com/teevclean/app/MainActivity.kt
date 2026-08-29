@@ -34,10 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -123,7 +120,7 @@ fun TeeVCleanApp(onPickFolder: () -> Unit) {
 private fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
     Column(Modifier.width(210.dp).fillMaxHeight()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.DeleteSweep, null, tint = Ink, modifier = Modifier.size(25.dp)) }
+            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Text("✓", Ink, 25.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.width(12.dp)); Text("TeeV", Color.White, 25.sp, fontWeight = FontWeight.Bold); Text(" clean", Lime, 25.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(62.dp))
@@ -153,9 +150,9 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
             Spacer(Modifier.height(7.dp)); Text("A calmer, cleaner TV starts here.", Muted, 16.sp); Spacer(Modifier.height(28.dp)); StorageCard(storage, onClean)
         }
         item { Text("Safe tools for a healthier TV", Color.White, 19.sp, fontWeight = FontWeight.SemiBold) }
-        item { FeatureCard("Large files", "Review downloads and media before deleting", Icons.Outlined.FolderOpen, if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
-        item { FeatureCard("App review", "${apps.size} apps; review size and open Android app info", Icons.Outlined.Apps, "Guided") }
-        item { FeatureCard("Device health", "Storage pressure, network, uptime and system details", Icons.Outlined.HealthAndSafety, "Check") }
+        item { FeatureCard("Large files", "Review downloads and media before deleting", "Files", if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
+        item { FeatureCard("App review", "${apps.size} apps; review size and open Android app info", "Apps", "Guided") }
+        item { FeatureCard("Device health", "Storage pressure, network, uptime and system details", "Health", "Check") }
         item { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Text("✦", Lime, 28.sp); Spacer(Modifier.width(16.dp)); Column { Text("Your privacy comes first", Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp); Text("No silent deletion and no fake RAM boosts. You approve every cleanup action.", Color(0xFFC4D1C2), 13.sp) } } }
     }
 }
@@ -172,9 +169,9 @@ private fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
 }
 
 @Composable
-private fun FeatureCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, amount: String) {
+private fun FeatureCard(title: String, subtitle: String, badge: String, amount: String) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp).focusable(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Lime, modifier = Modifier.size(27.dp)) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, Color.White, 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, Muted, 13.sp) }; Text(amount, Lime, 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", Muted, 28.sp)
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Text(badge.take(1), Lime, 20.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, Color.White, 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, Muted, 13.sp) }; Text(amount, Lime, 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", Muted, 28.sp)
     }
 }
 
