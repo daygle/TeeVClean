@@ -49,7 +49,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -98,11 +102,28 @@ fun TeeVCleanApp(onPickFolder: () -> Unit) {
     var showSchedule by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var scheduleEnabled by remember { mutableStateOf(isCleanupScheduled(context)) }
-    val storage = remember { readStorage() }
-    val apps = remember { loadApps(context) }
-    val files = remember { scanFiles() }
+    val scope = rememberCoroutineScope()
+    var storage by remember { mutableStateOf(readStorage()) }
+    var apps by remember { mutableStateOf(emptyList<AppSummary>()) }
+    var files by remember { mutableStateOf(emptyList<FileSummary>()) }
 
-    if (showCleanup) CleanupDialog { showCleanup = false }
+    fun refreshData() {
+        scope.launch {
+            val (loadedApps, scannedFiles) = withContext(Dispatchers.IO) {
+                loadApps(context) to scanFiles()
+            }
+            storage = readStorage()
+            apps = loadedApps
+            files = scannedFiles
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) { refreshData() }
+
+    if (showCleanup) CleanupDialog(onDismiss = { showCleanup = false }) {
+        showCleanup = false
+        storage = readStorage()
+    }
     if (showSchedule) ScheduleDialog(scheduleEnabled, onDismiss = { showSchedule = false }) { enabled ->
         scheduleEnabled = enabled
         setCleanupSchedule(context, enabled)
@@ -241,20 +262,38 @@ private fun ScheduleDialog(enabled: Boolean, onDismiss: () -> Unit, onSave: (Boo
 }
 
 @Composable
-private fun CleanupDialog(onDismiss: () -> Unit) {
+private fun CleanupDialog(onDismiss: () -> Unit, onCleaned: () -> Unit) {
     val context = LocalContext.current
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirm safe cleanup") }, text = { Text("Only TeeVClean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize(LocalContext.current))}.") }, confirmButton = { Button(onClick = { clearOwnCache(context); onDismiss() }) { Text("Remove cache") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirm safe cleanup") }, text = { Text("Only TeeVClean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize(LocalContext.current))}.") }, confirmButton = { Button(onClick = { clearOwnCache(context); onCleaned() }) { Text("Remove cache") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
-private fun readStorage(): StorageSummary { val stat = StatFs(Environment.getDataDirectory().path); val total = stat.blockCountLong * stat.blockSizeLong; return StorageSummary(total - stat.availableBytes, total) }
+private fun readStorage(): StorageSummary {
+    val stat = StatFs(Environment.getDataDirectory().path)
+    val total = stat.blockCountLong * stat.blockSizeLong
+    return StorageSummary((total - stat.availableBytes).coerceIn(0L, total), total)
+}
 private fun cacheSize(context: Context): Long = folderSize(context.cacheDir)
 private fun clearOwnCache(context: Context) { context.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }
-private fun folderSize(file: File): Long = if (!file.exists()) 0L else if (file.isFile) file.length() else file.listFiles()?.sumOf { folderSize(it) } ?: 0L
+private fun folderSize(file: File): Long = when {
+    !file.exists() -> 0L
+    file.isFile -> file.length()
+    else -> file.listFiles()?.sumOf(::folderSize) ?: 0L
+}
 
 private fun scanFiles(): List<FileSummary> {
-    val roots = listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
+    val roots = listOf(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+    )
     val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
-    return roots.flatMap { root -> root.listFiles()?.filter { it.isFile && (it.length() >= 500L * 1024 * 1024 || it.lastModified() < cutoff) }?.map { FileSummary(it.name, it.parent ?: "", it.length(), it.lastModified()) } ?: emptyList() }.sortedByDescending { it.size }
+    return roots.asSequence()
+        .flatMap { root -> root.listFiles()?.asSequence().orEmpty() }
+        .filter { it.isFile && (it.length() >= LARGE_FILE_BYTES || it.lastModified() < cutoff) }
+        .map { FileSummary(it.name, it.parent.orEmpty(), it.length(), it.lastModified()) }
+        .distinctBy { it.path }
+        .sortedByDescending { it.size }
+        .toList()
 }
 
 private fun loadApps(context: Context): List<AppSummary> {
@@ -264,14 +303,32 @@ private fun loadApps(context: Context): List<AppSummary> {
     return context.packageManager.getInstalledApplications(0).filter { it.packageName != context.packageName }.map { app -> AppSummary(app.loadLabel(context.packageManager).toString(), app.packageName, File(app.sourceDir ?: "").length(), lastUsed[app.packageName] ?: 0L) }.sortedByDescending { it.size }
 }
 
-private fun isCleanupScheduled(context: Context): Boolean = WorkManager.getInstance(context).getWorkInfosForUniqueWork("weekly-cache-cleanup").get().any { !it.state.isFinished }
+private fun isCleanupScheduled(context: Context): Boolean = runCatching {
+    WorkManager.getInstance(context).getWorkInfosForUniqueWork(WEEKLY_CLEANUP_WORK).get()
+        .any { it.state == androidx.work.WorkInfo.State.ENQUEUED || it.state == androidx.work.WorkInfo.State.RUNNING }
+}.getOrDefault(false)
 
 private fun setCleanupSchedule(context: Context, enabled: Boolean) {
     val manager = WorkManager.getInstance(context)
-    if (!enabled) manager.cancelUniqueWork("weekly-cache-cleanup") else manager.enqueueUniquePeriodicWork("weekly-cache-cleanup", ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<CleanupWorker>(7, TimeUnit.DAYS).build())
+    if (!enabled) {
+        manager.cancelUniqueWork(WEEKLY_CLEANUP_WORK)
+    } else {
+        manager.enqueueUniquePeriodicWork(
+            WEEKLY_CLEANUP_WORK,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<CleanupWorker>(7, TimeUnit.DAYS).build(),
+        )
+    }
 }
 
 private fun openAppInfo(context: Context, packageName: String) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
 private fun lastUsedText(timestamp: Long): String = if (timestamp == 0L) "last used unavailable" else "last used ${java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(timestamp)}"
 private fun formatBytes(bytes: Long): String { if (bytes < 1024) return "$bytes B"; val units = arrayOf("KB", "MB", "GB", "TB"); var value = bytes.toDouble(); var index = -1; while (value >= 1024 && index < units.lastIndex) { value /= 1024; index++ }; return String.format(Locale.US, "%.1f %s", value, units[index]) }
-private fun formatDuration(milliseconds: Long): String { val hours = milliseconds / 3_600_000; val days = hours / 24; return if (days > 0) "$days days, ${hours % 24} hours" else "$hours hours" }
+private const val WEEKLY_CLEANUP_WORK = "weekly-cache-cleanup"
+private const val LARGE_FILE_BYTES = 500L * 1024 * 1024
+
+private fun formatDuration(milliseconds: Long): String {
+    val hours = milliseconds.coerceAtLeast(0L) / 3_600_000
+    val days = hours / 24
+    return if (days > 0) "$days days, ${hours % 24} hours" else "$hours hours"
+}

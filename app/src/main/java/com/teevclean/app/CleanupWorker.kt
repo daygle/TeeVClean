@@ -9,7 +9,9 @@ class CleanupWorker(
     workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        applicationContext.cacheDir.listFiles()?.forEach { it.deleteRecursively() }
-        return Result.success()
+        val failed = applicationContext.cacheDir.listFiles()
+            ?.any { !it.deleteRecursively() && it.exists() }
+            ?: false
+        return if (failed) Result.retry() else Result.success()
     }
 }
