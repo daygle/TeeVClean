@@ -16,7 +16,7 @@ The app intentionally guides users to system settings for operations Android doe
 
 ## Build
 
-Open this repository in Android Studio with Android SDK 35 installed, then run:
+Open this repository in Android Studio with Android SDK 35 installed. Use Gradle 8.11.1 (the included wrapper) with Android Gradle Plugin 8.9.3, then run:
 
 ```bash
 ./gradlew assembleDebug
