@@ -99,10 +99,16 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
         CleanupResultDialog(result) { cleanupResult = null }
     }
     if (showSchedule) {
-        ScheduleDialog(viewModel.scheduleEnabled, onDismiss = { showSchedule = false }) { enabled ->
-            viewModel.toggleSchedule(enabled)
-            showSchedule = false
-        }
+        ScheduleDialog(
+            current = viewModel.cleanupFrequency,
+            sweepEnabled = viewModel.scheduleSweepEnabled,
+            hasFolders = viewModel.customFolders.isNotEmpty(),
+            onDismiss = { showSchedule = false },
+            onSave = { frequency, includeSweep ->
+                viewModel.setSchedule(frequency, includeSweep)
+                showSchedule = false
+            },
+        )
     }
 
     MaterialTheme {
@@ -123,7 +129,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 onSchedule = { showSchedule = true },
                                 onSweep = { showSweep = true },
                                 onFreeUpSpace = { viewModel.openStorageManager() },
-                                scheduleEnabled = viewModel.scheduleEnabled,
+                                scheduleButtonLabel = scheduleButtonLabel(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
                                 onNavigate = { viewModel.currentScreen = it },
                             )
                             Screen.LARGE -> {
@@ -147,10 +153,10 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                             )
                             Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
                             Screen.SETTINGS -> SettingsScreen(
-                                viewModel.scheduleEnabled,
-                                viewModel.customFolders,
-                                { viewModel.toggleSchedule(it) },
-                                { viewModel.removeCustomFolder(it) }
+                                scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
+                                customFolders = viewModel.customFolders,
+                                onEditSchedule = { showSchedule = true },
+                                onRemoveFolder = { viewModel.removeCustomFolder(it) },
                             )
                         }
                     }
@@ -221,7 +227,7 @@ private fun CleanupScreen(
     onSchedule: () -> Unit,
     onSweep: () -> Unit,
     onFreeUpSpace: () -> Unit,
-    scheduleEnabled: Boolean,
+    scheduleButtonLabel: String,
     onNavigate: (Screen) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -261,9 +267,7 @@ private fun CleanupScreen(
             TvTextButton(onClick = onFreeUpSpace) { Text(stringResource(R.string.free_up_space)) }
         }
         item {
-            TvTextButton(onClick = onSchedule) {
-                Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup))
-            }
+            TvTextButton(onClick = onSchedule) { Text(scheduleButtonLabel) }
         }
         item {
             TvTextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
@@ -383,13 +387,71 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
 }
 
 @Composable
-private fun ScheduleDialog(enabled: Boolean, onDismiss: () -> Unit, onSave: (Boolean) -> Unit) {
+private fun scheduleStatusText(frequency: CleanupFrequency, sweepEnabled: Boolean): String {
+    val base = when (frequency) {
+        CleanupFrequency.OFF -> stringResource(R.string.freq_off)
+        CleanupFrequency.DAILY -> stringResource(R.string.freq_daily)
+        CleanupFrequency.WEEKLY -> stringResource(R.string.freq_weekly)
+        CleanupFrequency.MONTHLY -> stringResource(R.string.freq_monthly)
+    }
+    return if (frequency != CleanupFrequency.OFF && sweepEnabled) {
+        stringResource(R.string.schedule_with_sweep, base)
+    } else {
+        base
+    }
+}
+
+@Composable
+private fun scheduleButtonLabel(frequency: CleanupFrequency, sweepEnabled: Boolean): String =
+    if (frequency == CleanupFrequency.OFF) {
+        stringResource(R.string.schedule_cta)
+    } else {
+        stringResource(R.string.schedule_status, scheduleStatusText(frequency, sweepEnabled))
+    }
+
+@Composable
+private fun ScheduleDialog(
+    current: CleanupFrequency,
+    sweepEnabled: Boolean,
+    hasFolders: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (CleanupFrequency, Boolean) -> Unit,
+) {
+    var frequency by remember { mutableStateOf(current) }
+    var sweep by remember { mutableStateOf(sweepEnabled) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.scheduled_cleanup_title)) },
-        text = { Text(if (enabled) stringResource(R.string.scheduled_cleanup_enabled_desc) else stringResource(R.string.scheduled_cleanup_disabled_desc)) },
-        confirmButton = { TvButton(onClick = { onSave(!enabled) }) { Text(if (enabled) stringResource(R.string.turn_off) else stringResource(R.string.enable)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        title = { Text(stringResource(R.string.schedule_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SelectableChip(stringResource(R.string.freq_off), frequency == CleanupFrequency.OFF) { frequency = CleanupFrequency.OFF }
+                    SelectableChip(stringResource(R.string.freq_daily), frequency == CleanupFrequency.DAILY) { frequency = CleanupFrequency.DAILY }
+                    SelectableChip(stringResource(R.string.freq_weekly), frequency == CleanupFrequency.WEEKLY) { frequency = CleanupFrequency.WEEKLY }
+                    SelectableChip(stringResource(R.string.freq_monthly), frequency == CleanupFrequency.MONTHLY) { frequency = CleanupFrequency.MONTHLY }
+                }
+                Spacer(Modifier.height(18.dp))
+                Text(stringResource(R.string.schedule_items_label), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.schedule_cache_always), color = Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                SelectableChip(
+                    stringResource(R.string.schedule_include_sweep),
+                    selected = sweep && hasFolders,
+                    enabled = hasFolders,
+                ) { sweep = !sweep }
+                if (!hasFolders) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = { TvButton(onClick = { onSave(frequency, sweep && hasFolders) }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

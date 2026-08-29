@@ -11,9 +11,12 @@ class CleanupWorker(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result =
         try {
-            // Delegate to the repository so scheduled cleanup matches the manual action:
-            // internal + external + code cache are all cleared.
-            TeeVRepository(applicationContext).clearOwnCache()
+            // Only unattended-safe actions run here — never user files or other apps' caches.
+            val repository = TeeVRepository(applicationContext)
+            repository.clearOwnCache()
+            if (inputData.getBoolean(TeeVRepository.INCLUDE_SWEEP, false)) {
+                repository.sweepJunk()
+            }
             Result.success()
         } catch (e: Exception) {
             Log.e("CleanupWorker", "Error during scheduled cleanup", e)

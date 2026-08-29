@@ -101,6 +101,23 @@
     <string name="confirm_delete_file">Delete this file?</string>
     <string name="confirm_delete_file_desc">%1$s (%2$s) will be permanently deleted from your storage. This cannot be undone.</string>
     <string name="confirm_sweep_desc">Remove leftover temp, log and thumbnail files, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
+    <string name="schedule_title">Automatic Cleanup</string>
+    <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included — never your files or other apps\' caches.</string>
+    <string name="schedule_frequency_label">How often</string>
+    <string name="freq_off">Off</string>
+    <string name="freq_daily">Daily</string>
+    <string name="freq_weekly">Weekly</string>
+    <string name="freq_monthly">Monthly</string>
+    <string name="schedule_items_label">What to clean</string>
+    <string name="schedule_cache_always">TeeVClean cache — always included</string>
+    <string name="schedule_include_sweep">Temp &amp; log files in my folders</string>
+    <string name="schedule_sweep_needs_folder">Add a folder in Large Files to enable this.</string>
+    <string name="schedule_cta">Schedule Cleanup</string>
+    <string name="schedule_status">Scheduled: %1$s</string>
+    <string name="schedule_with_sweep">%1$s · incl. temp sweep</string>
+    <string name="schedule_change">Change</string>
+    <string name="save">Save</string>
+
     <string name="cleanup_complete">Cleanup Complete</string>
     <string name="cleanup_nothing">Everything was already clean — nothing to remove.</string>
     <string name="done">Done</string>
