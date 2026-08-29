@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.TeeVClean" parent="android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#B7F35B</item>
+        <item name="android:navigationBarColor">#101311</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
