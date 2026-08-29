@@ -8,6 +8,11 @@ android {
     namespace = "com.teevclean.app"
     compileSdk = 35
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
     defaultConfig {
         applicationId = "com.teevclean.app"
         minSdk = 23
@@ -17,6 +22,10 @@ android {
     }
 
     buildFeatures { compose = true }
+
+    kotlinOptions {
+        jvmTarget = "21"
+    }
 }
 
 dependencies {
