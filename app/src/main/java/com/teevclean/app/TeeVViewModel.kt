@@ -109,6 +109,7 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
     var scheduleEnabled by mutableStateOf(repository.isCleanupScheduled())
     var cacheSize by mutableLongStateOf(0L)
     var isRefreshing by mutableStateOf(false)
+    var lastCleanupResult by mutableStateOf<CleanupResult?>(null)
 
     init {
         refreshData()
@@ -141,13 +142,33 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearCache(onComplete: () -> Unit) {
+    fun clearCache(onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
-            repository.clearOwnCache()
+            val result = repository.clearOwnCache()
+            lastCleanupResult = result
+            refreshData()
+            onComplete(result)
+        }
+    }
+
+    fun deleteLargeFile(uri: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteFile(uri)
             refreshData()
             onComplete()
         }
     }
+
+    fun sweepJunk(onComplete: (CleanupResult) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.sweepJunk()
+            lastCleanupResult = result
+            refreshData()
+            onComplete(result)
+        }
+    }
+
+    fun openStorageManager() = repository.openStorageManager()
 
     fun toggleSchedule(enabled: Boolean) {
         repository.setCleanupSchedule(enabled)

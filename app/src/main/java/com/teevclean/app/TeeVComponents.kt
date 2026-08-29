@@ -129,6 +129,40 @@ fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {
 }
 
 @Composable
+fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (isFocused) PanelLight else Panel)
+            .border(
+                if (isFocused) 2.dp else 0.dp,
+                if (isFocused) Lime else Color.Transparent,
+                RoundedCornerShape(18.dp),
+            )
+            .padding(22.dp)
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onClick()
+                    true
+                } else false
+            }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 14.sp)
+        }
+        Text(action, color = Lime, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(14.dp))
+        Text("›", color = Muted, fontSize = 26.sp)
+    }
+}
+
+@Composable
 fun FeatureCard(
     title: String,
     subtitle: String,
