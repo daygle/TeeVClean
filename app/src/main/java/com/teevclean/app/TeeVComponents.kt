@@ -36,6 +36,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -82,8 +87,17 @@ fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
                 if (isFocused) Lime else if (active) Lime.copy(alpha = .35f) else Color.Transparent,
                 RoundedCornerShape(14.dp)
             )
-            .focusable(interactionSource = interactionSource)
-            .clickable(onClick = { onSelect(screen) }),
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onSelect(screen)
+                    true
+                } else false
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = { onSelect(screen) }
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -137,8 +151,17 @@ fun FeatureCard(
                 RoundedCornerShape(18.dp)
             )
             .padding(20.dp)
-            .focusable(interactionSource = interactionSource)
-            .clickable(onClick = onClick),
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onClick()
+                    true
+                } else false
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = Lime, modifier = Modifier.size(22.dp)) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
@@ -150,7 +173,12 @@ fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(27.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(stringResource(R.string.storage_health_label), color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.used_of_total, formatBytes(storage.used), formatBytes(storage.total)), color = Muted, fontSize = 15.sp) }
-            Column(horizontalAlignment = Alignment.End) { Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.available_space_label), color = Muted, fontSize = 13.sp); Spacer(Modifier.height(14.dp)); Button(onClick = onClean) { Text(stringResource(R.string.review_safe_cleanup)) } }
+            Column(horizontalAlignment = Alignment.End) { 
+                Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.available_space_label), color = Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(14.dp))
+                TvButton(onClick = onClean) { Text(stringResource(R.string.review_safe_cleanup)) } 
+            }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
     }
@@ -174,7 +202,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup), color = Muted, modifier = Modifier.weight(1f))
-                    Button(onClick = { onToggleSchedule(!scheduleEnabled) }) {
+                    TvButton(onClick = { onToggleSchedule(!scheduleEnabled) }) {
                         Text(if (scheduleEnabled) stringResource(R.string.turn_off) else stringResource(R.string.enable))
                     }
                 }
@@ -220,7 +248,69 @@ fun PermissionRationale(title: String, description: String, onClick: () -> Unit)
         Spacer(Modifier.height(16.dp))
         Text(description, color = Muted, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onClick) { Text(stringResource(R.string.enable)) }
+        TvButton(onClick = onClick) { Text(stringResource(R.string.enable)) }
+    }
+}
+
+@Composable
+fun TvButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Button(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            containerColor = if (isFocused) Lime else PanelLight,
+            contentColor = if (isFocused) Ink else Color.White
+        ),
+        modifier = modifier
+            .border(
+                if (isFocused) 2.dp else 0.dp,
+                if (isFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
+                RoundedCornerShape(8.dp)
+            )
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onClick()
+                    true
+                } else false
+            },
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun TvTextButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    TextButton(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+            contentColor = if (isFocused) Lime else Muted
+        ),
+        modifier = modifier
+            .background(if (isFocused) Color.White.copy(alpha = 0.05f) else Color.Transparent, RoundedCornerShape(8.dp))
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onClick()
+                    true
+                } else false
+            }
+    ) {
+        content()
     }
 }
 

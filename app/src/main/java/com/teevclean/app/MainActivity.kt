@@ -203,11 +203,11 @@ private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () 
         ResultRow(stringResource(R.string.other_app_caches), stringResource(R.string.other_app_caches_desc), "Guided", false)
         ResultRow(stringResource(R.string.downloads_and_media), stringResource(R.string.downloads_and_media_desc), "User choice", false)
         Spacer(Modifier.height(10.dp))
-        Button(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
-        TextButton(onClick = onSchedule) {
+        TvButton(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
+        TvTextButton(onClick = onSchedule) {
             Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup))
         }
-        TextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
+        TvTextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
             Text(stringResource(R.string.overview))
         }
     }
@@ -232,7 +232,7 @@ private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit)
                 }
             }
         }
-        Button(onClick = onPickFolder) { Text(stringResource(R.string.choose_folder_to_scan)) }
+        TvButton(onClick = onPickFolder) { Text(stringResource(R.string.choose_folder_to_scan)) }
         Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 13.sp)
     }
 }
@@ -256,7 +256,7 @@ private fun AppReviewScreen(apps: List<AppSummary>, onOpenInfo: (String) -> Unit
                     }
                     Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(16.dp))
-                    TextButton(onClick = { onOpenInfo(app.packageName) }) { Text(stringResource(R.string.app_info_btn)) }
+                    TvTextButton(onClick = { onOpenInfo(app.packageName) }) { Text(stringResource(R.string.app_info_btn)) }
                 }
             }
         }
@@ -284,8 +284,8 @@ private fun ScheduleDialog(enabled: Boolean, onDismiss: () -> Unit, onSave: (Boo
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.scheduled_cleanup_title)) },
         text = { Text(if (enabled) stringResource(R.string.scheduled_cleanup_enabled_desc) else stringResource(R.string.scheduled_cleanup_disabled_desc)) },
-        confirmButton = { Button(onClick = { onSave(!enabled) }) { Text(if (enabled) stringResource(R.string.turn_off) else stringResource(R.string.enable)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        confirmButton = { TvButton(onClick = { onSave(!enabled) }) { Text(if (enabled) stringResource(R.string.turn_off) else stringResource(R.string.enable)) } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -295,8 +295,8 @@ private fun CleanupDialog(cacheSize: Long, onDismiss: () -> Unit, onCleaned: () 
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.confirm_safe_cleanup)) },
         text = { Text(stringResource(R.string.confirm_cleanup_desc, formatBytes(cacheSize))) },
-        confirmButton = { Button(onClick = onCleaned) { Text(stringResource(R.string.remove_cache)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        confirmButton = { TvButton(onClick = onCleaned) { Text(stringResource(R.string.remove_cache)) } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
