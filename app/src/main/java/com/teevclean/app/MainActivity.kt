@@ -15,6 +15,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -158,7 +156,7 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                 stringResource(R.string.feature_large_files_desc),
                 "Files",
                 if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size }),
-                Icons.Outlined.FolderOpen
+Screen.LARGE.icon
             ) { onNavigate(Screen.LARGE) }
         }
         item {
@@ -167,7 +165,7 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                 pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size),
                 "Apps",
                 "Guided",
-                Icons.Outlined.Apps
+Screen.APPS.icon
             ) { onNavigate(Screen.APPS) }
         }
         item {
@@ -176,7 +174,7 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                 stringResource(R.string.feature_device_health_desc),
                 "Health",
                 "Check",
-                Icons.Outlined.MonitorHeart
+Screen.HEALTH.icon
             ) { onNavigate(Screen.HEALTH) }
         }
         item {

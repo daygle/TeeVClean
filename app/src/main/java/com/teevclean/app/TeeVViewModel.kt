@@ -5,25 +5,37 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.MonitorHeart
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 
+private fun menuIcon(name: String): ImageVector = ImageVector.Builder(
+    name = name,
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).path {
+    when (name) {
+        "overview" -> { moveTo(3f, 3f); horizontalLineTo(10f); verticalLineTo(10f); horizontalLineTo(3f); close(); moveTo(14f, 3f); horizontalLineTo(21f); verticalLineTo(10f); horizontalLineTo(14f); close(); moveTo(3f, 14f); horizontalLineTo(10f); verticalLineTo(21f); horizontalLineTo(3f); close(); moveTo(14f, 14f); horizontalLineTo(21f); verticalLineTo(21f); horizontalLineTo(14f); close() }
+        "clean" -> { moveTo(9f, 3f); lineTo(11f, 3f); lineTo(11f, 12f); lineTo(9f, 12f); close(); moveTo(13f, 3f); lineTo(15f, 3f); lineTo(15f, 12f); lineTo(13f, 12f); close(); moveTo(7f, 10f); lineTo(17f, 10f); lineTo(16f, 21f); lineTo(8f, 21f); close() }
+        "files" -> { moveTo(3f, 5f); lineTo(9f, 5f); lineTo(11f, 7f); lineTo(21f, 7f); lineTo(21f, 19f); lineTo(3f, 19f); close() }
+        "apps" -> { moveTo(4f, 4f); lineTo(10f, 4f); lineTo(10f, 10f); lineTo(4f, 10f); close(); moveTo(14f, 4f); lineTo(20f, 4f); lineTo(20f, 10f); lineTo(14f, 10f); close(); moveTo(4f, 14f); lineTo(10f, 14f); lineTo(10f, 20f); lineTo(4f, 20f); close(); moveTo(14f, 14f); lineTo(20f, 14f); lineTo(20f, 20f); lineTo(14f, 20f); close() }
+        "health" -> { moveTo(3f, 12f); horizontalLineTo(7f); lineTo(9f, 5f); lineTo(13f, 19f); lineTo(15f, 12f); horizontalLineTo(21f) }
+        "settings" -> { moveTo(12f, 8f); arcTo(4f, 4f, 0f, false, true, 0f, 8f); arcTo(4f, 4f, 0f, false, true, 0f, -8f); moveTo(12f, 3f); verticalLineTo(1f); moveTo(12f, 23f); verticalLineTo(21f); moveTo(3f, 12f); horizontalLineTo(1f); moveTo(23f, 12f); horizontalLineTo(21f) }
+    }
+}.build()
+
 enum class Screen(val labelRes: Int, val icon: ImageVector) {
-    OVERVIEW(R.string.overview, Icons.Outlined.Dashboard),
-    CLEAN(R.string.safe_cleanup, Icons.Outlined.CleaningServices),
-    LARGE(R.string.large_files, Icons.Outlined.FolderOpen),
-    APPS(R.string.app_review, Icons.Outlined.Apps),
-    HEALTH(R.string.device_health, Icons.Outlined.MonitorHeart),
-    SETTINGS(R.string.settings, Icons.Outlined.Settings)
+    OVERVIEW(R.string.overview, menuIcon("overview")),
+    CLEAN(R.string.safe_cleanup, menuIcon("clean")),
+    LARGE(R.string.large_files, menuIcon("files")),
+    APPS(R.string.app_review, menuIcon("apps")),
+    HEALTH(R.string.device_health, menuIcon("health")),
+    SETTINGS(R.string.settings, menuIcon("settings"))
 }
 
 class TeeVViewModel(application: Application) : AndroidViewModel(application) {
