@@ -34,7 +34,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -120,16 +119,16 @@ fun TeeVCleanApp(onPickFolder: () -> Unit) {
 private fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
     Column(Modifier.width(210.dp).fillMaxHeight()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Text("✓", Ink, 25.sp, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.width(12.dp)); Text("TeeV", Color.White, 25.sp, fontWeight = FontWeight.Bold); Text(" clean", Lime, 25.sp, fontWeight = FontWeight.Bold)
+            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Text("✓", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text(" clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(62.dp))
         Screen.entries.forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp)).focusable(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Settings, null, tint = Muted, modifier = Modifier.padding(18.dp).size(18.dp)); Text("Settings", Muted, 15.sp)
+            Icon(Icons.Outlined.Settings, null, tint = Muted, modifier = Modifier.padding(18.dp).size(18.dp)); Text("Settings", color = Muted, fontSize = 15.sp)
         }
-        Text("TV CLEANER  •  v1.0", Muted, 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
+        Text("TV CLEANER  •  v1.0", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
     }
 }
 
@@ -146,14 +145,14 @@ private fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit
 private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, onClean: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item {
-            Text("Good evening, ready to tidy up?", Color.White, 31.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(7.dp)); Text("A calmer, cleaner TV starts here.", Muted, 16.sp); Spacer(Modifier.height(28.dp)); StorageCard(storage, onClean)
+            Text("Good evening, ready to tidy up?", color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(7.dp)); Text("A calmer, cleaner TV starts here.", color = Muted, fontSize = 16.sp); Spacer(Modifier.height(28.dp)); StorageCard(storage, onClean)
         }
-        item { Text("Safe tools for a healthier TV", Color.White, 19.sp, fontWeight = FontWeight.SemiBold) }
+        item { Text("Safe tools for a healthier TV", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
         item { FeatureCard("Large files", "Review downloads and media before deleting", "Files", if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
         item { FeatureCard("App review", "${apps.size} apps; review size and open Android app info", "Apps", "Guided") }
         item { FeatureCard("Device health", "Storage pressure, network, uptime and system details", "Health", "Check") }
-        item { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Text("✦", Lime, 28.sp); Spacer(Modifier.width(16.dp)); Column { Text("Your privacy comes first", Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp); Text("No silent deletion and no fake RAM boosts. You approve every cleanup action.", Color(0xFFC4D1C2), 13.sp) } } }
+        item { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Text("✦", color = Lime, fontSize = 28.sp); Spacer(Modifier.width(16.dp)); Column { Text("Your privacy comes first", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp); Text("No silent deletion and no fake RAM boosts. You approve every cleanup action.", color = Color(0xFFC4D1C2), fontSize = 13.sp) } } }
     }
 }
 
@@ -161,8 +160,8 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
 private fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(27.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text("STORAGE HEALTH", Lime, 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), Color.White, 42.sp, fontWeight = FontWeight.Bold); Text("of ${formatBytes(storage.total)} used", Muted, 15.sp) }
-            Column(horizontalAlignment = Alignment.End) { Text(formatBytes(storage.free), Lime, 25.sp, fontWeight = FontWeight.Bold); Text("available space", Muted, 13.sp); Spacer(Modifier.height(14.dp)); Button(onClick = onClean) { Text("Review safe cleanup") } }
+            Column(Modifier.weight(1f)) { Text("STORAGE HEALTH", color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text("of ${formatBytes(storage.total)} used", color = Muted, fontSize = 15.sp) }
+            Column(horizontalAlignment = Alignment.End) { Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("available space", color = Muted, fontSize = 13.sp); Spacer(Modifier.height(14.dp)); Button(onClick = onClean) { Text("Review safe cleanup") } }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
     }
@@ -171,14 +170,14 @@ private fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
 @Composable
 private fun FeatureCard(title: String, subtitle: String, badge: String, amount: String) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp).focusable(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Text(badge.take(1), Lime, 20.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, Color.White, 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, Muted, 13.sp) }; Text(amount, Lime, 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", Muted, 28.sp)
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Text(badge.take(1), color = Lime, fontSize = 20.sp, fontWeight = FontWeight.Bold) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
     }
 }
 
 @Composable
 private fun CleanupScreen(onReview: () -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Safe cleanup", Color.White, 32.sp, fontWeight = FontWeight.Bold); Text("Scan temporary files and review every item before removal.", Muted, 16.sp); Spacer(Modifier.height(12.dp))
+        Text("Safe cleanup", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Text("Scan temporary files and review every item before removal.", color = Muted, fontSize = 16.sp); Spacer(Modifier.height(12.dp))
         ResultRow("This app's cache", "Safe to remove; app data and user files stay intact", formatBytes(cacheSize()), true)
         ResultRow("Other app caches", "Android requires each app's own info page", "Guided", false)
         ResultRow("Downloads and media", "Select files in the large-file review", "User choice", false)
@@ -187,26 +186,26 @@ private fun CleanupScreen(onReview: () -> Unit) {
 }
 
 @Composable
-private fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, Color.White, 17.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, Muted, 14.sp) }; Text(amount, if (safe) Lime else Color.White, 16.sp, fontWeight = FontWeight.Bold) }
+private fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 14.sp) }; Text(amount, color = if (safe) Lime else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+
 }
 
 @Composable
 private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Large files", Color.White, 32.sp, fontWeight = FontWeight.Bold); Text("Review files in shared storage. Unknown files are never deleted automatically.", Muted, 16.sp)
+        Text("Large files", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Text("Review files in shared storage. Unknown files are never deleted automatically.", color = Muted, fontSize = 16.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { listOf("Over 500 MB", "Older than 30 days", "Downloads").forEach { Text(it, Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Lime).padding(horizontal = 18.dp, vertical = 10.dp)) } }
-        if (files.isEmpty()) Text("No large files were found in the accessible Downloads and media folders.", Muted, 15.sp) else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(files.take(10)) { file -> ResultRow(file.name, file.path, formatBytes(file.size), false) } }
+        if (files.isEmpty()) Text("No large files were found in the accessible Downloads and media folders.", color = Muted, fontSize = 15.sp) else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(files.take(10)) { file -> ResultRow(file.name, file.path, formatBytes(file.size), false) } }
         Button(onClick = onPickFolder) { Text("Choose folder to scan") }
-        Text("Folder access uses Android's Storage Access Framework. You stay in control of the location.", Muted, 13.sp)
+        Text("Folder access uses Android's Storage Access Framework. You stay in control of the location.", color = Muted, fontSize = 13.sp)
     }
 }
 
 @Composable
 private fun AppReviewScreen(apps: List<AppSummary>, context: Context) {
     Column(Modifier.fillMaxSize()) {
-        Text("App review", Color.White, 32.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); Text("Apps are sorted by installed APK size. Last-used data may be unavailable without usage access.", Muted, 16.sp); Spacer(Modifier.height(20.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(apps.take(12)) { app -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(app.label, Color.White, 16.sp, fontWeight = FontWeight.SemiBold); Text("${app.packageName} • ${lastUsedText(app.lastUsed)}", Muted, 12.sp) }; Text(formatBytes(app.size), Lime, fontWeight = FontWeight.Bold); Spacer(Modifier.width(16.dp)); TextButton(onClick = { openAppInfo(context, app.packageName) }) { Text("App info") } } } }
+        Text("App review", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); Text("Apps are sorted by installed APK size. Last-used data may be unavailable without usage access.", color = Muted, fontSize = 16.sp); Spacer(Modifier.height(20.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(apps.take(12)) { app -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(app.label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text("${app.packageName} • ${lastUsedText(app.lastUsed)}", color = Muted, fontSize = 12.sp) }; Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold); Spacer(Modifier.width(16.dp)); TextButton(onClick = { openAppInfo(context, app.packageName) }) { Text("App info") } } } }
     }
 }
 
@@ -215,12 +214,12 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
     val manager = context.getSystemService(ConnectivityManager::class.java)
     val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Device health", Color.White, 32.sp, fontWeight = FontWeight.Bold); Text("Practical diagnostics, not RAM booster claims.", Muted, 16.sp)
+        Text("Device health", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Text("Practical diagnostics, not RAM booster claims.", color = Muted, fontSize = 16.sp)
         ResultRow("Storage pressure", if (storage.fraction > .85) "Low space — review large files" else "Healthy free-space margin", "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f)
         ResultRow("Network", if (network) "Internet connection detected" else "No active internet connection", if (network) "Connected" else "Offline", network)
         ResultRow("System uptime", "Time since the device last booted", formatDuration(SystemClock.elapsedRealtime()), true)
         ResultRow("Android version", "${Build.MANUFACTURER} ${Build.MODEL}", "Android ${Build.VERSION.RELEASE}", true)
-        Text("Thermal readings vary by TV manufacturer and are not exposed on every device.", Muted, 13.sp)
+        Text("Thermal readings vary by TV manufacturer and are not exposed on every device.", color = Muted, fontSize = 13.sp)
     }
 }
 
