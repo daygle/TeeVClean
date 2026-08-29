@@ -12,7 +12,10 @@
     <string name="safe_tools_title">Safe tools for a healthier TV</string>
 
     <string name="feature_large_files_desc">Review downloads and media before deleting</string>
-    <string name="feature_app_review_desc">%1$d apps; review size and open Android app info</string>
+    <plurals name="feature_app_review_desc">
+        <item quantity="one">%1$d app; review size and open Android app info</item>
+        <item quantity="other">%1$d apps; review size and open Android app info</item>
+    </plurals>
     <string name="feature_device_health_desc">Storage pressure, network, uptime and system details</string>
 
     <string name="privacy_title">Your privacy comes first</string>
@@ -74,7 +77,7 @@
     <string name="last_used_at">Last used %1$s</string>
     <string name="version_footer">TV Cleaner  •  v%1$s</string>
 
-    <string name="scanning">Scanning...</string>
+    <string name="scanning">Scanning…</string>
     <string name="permission_required">Permission Required</string>
     <string name="usage_access_rationale">To show when apps were last used, TeeVClean needs Usage Access permission. Tap here to open settings.</string>
     <string name="storage_access_rationale">To scan for large files, please add a folder for the app to analyze.</string>

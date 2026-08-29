@@ -15,11 +15,10 @@
     <application
         android:theme="@style/Theme.TeeVClean"
         android:label="TeeVClean"
-        android:banner="@drawable/tv_banner"
-        android:icon="@drawable/ic_launcher">
+        android:banner="@drawable/teevclean_banner"
+        android:icon="@drawable/teevclean_launcher">
         <activity
             android:name=".MainActivity"
-            android:screenOrientation="landscape"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

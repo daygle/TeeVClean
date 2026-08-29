@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -34,13 +36,13 @@ class TeeVRepository(private val context: Context) {
     fun addCustomFolder(uri: String) {
         val folders = getCustomFolders().toMutableSet()
         folders.add(uri)
-        prefs.edit().putStringSet("custom_folders", folders).apply()
+        prefs.edit { putStringSet("custom_folders", folders) }
     }
 
     fun removeCustomFolder(uri: String) {
         val folders = getCustomFolders().toMutableSet()
         folders.remove(uri)
-        prefs.edit().putStringSet("custom_folders", folders).apply()
+        prefs.edit { putStringSet("custom_folders", folders) }
     }
 
     suspend fun readStorage(): StorageSummary = withContext(Dispatchers.IO) {
@@ -65,7 +67,7 @@ class TeeVRepository(private val context: Context) {
         )
         val customFolders = getCustomFolders().mapNotNull { uriString ->
             try {
-                val uri = Uri.parse(uriString)
+                val uri = uriString.toUri()
                 // Note: For TV, we might need to handle Uri-to-File conversion or use DocumentFile
                 // For simplicity in this refactor, we assume direct File access if possible, 
                 // but real SAF implementation would use DocumentFile.
@@ -126,7 +128,7 @@ class TeeVRepository(private val context: Context) {
     }
 
     fun openAppInfo(packageName: String) {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")).apply {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)

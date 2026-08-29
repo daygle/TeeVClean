@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.app.AppOpsManager
 import android.content.pm.PackageManager
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import android.os.SystemClock
@@ -151,7 +152,7 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
         }
         item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
         item { FeatureCard(stringResource(R.string.large_files), stringResource(R.string.feature_large_files_desc), "Files", if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
-        item { FeatureCard(stringResource(R.string.app_review), stringResource(R.string.feature_app_review_desc, apps.size), "Apps", "Guided") }
+        item { FeatureCard(stringResource(R.string.app_review), pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size), "Apps", "Guided") }
         item { FeatureCard(stringResource(R.string.device_health), stringResource(R.string.feature_device_health_desc), "Health", "Check") }
         item {
             Row(
