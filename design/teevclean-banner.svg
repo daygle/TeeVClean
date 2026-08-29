@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 720" role="img" aria-labelledby="title desc">
+  <title id="title">TeeVClean clean TV banner</title>
+  <desc id="desc">A modern Android TV cleaning banner with a scanning beam clearing storage clutter.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1118"/><stop offset=".58" stop-color="#101E29"/><stop offset="1" stop-color="#122D34"/>
+    </linearGradient>
+    <linearGradient id="scan" x1="510" y1="574" x2="1218" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#23D9E8" stop-opacity="0"/><stop offset=".72" stop-color="#23D9E8" stop-opacity=".72"/><stop offset="1" stop-color="#8CFF72"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="24"/></filter>
+  </defs>
+  <rect width="1600" height="720" rx="36" fill="url(#bg)"/>
+  <circle cx="1280" cy="170" r="180" fill="#23D9E8" opacity=".08" filter="url(#soft)"/>
+  <circle cx="1410" cy="620" r="220" fill="#8CFF72" opacity=".06" filter="url(#soft)"/>
+  <g transform="translate(760 112) rotate(-8)">
+    <rect width="680" height="414" rx="52" fill="#0D171F" stroke="#36515B" stroke-width="12"/>
+    <rect x="28" y="28" width="624" height="358" rx="34" fill="#142832"/>
+    <path d="M50 350 630 66" stroke="url(#scan)" stroke-width="38" stroke-linecap="round" filter="url(#soft)"/>
+    <path d="M52 346 626 69" stroke="#BDFEFF" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="630" cy="68" r="18" fill="#8CFF72"/>
+    <path d="M630 35v66M597 68h66" stroke="#F4FBFF" stroke-width="7" stroke-linecap="round"/>
+    <g fill="#FFC857"><circle cx="136" cy="264" r="10"/><circle cx="198" cy="298" r="7"/><circle cx="108" cy="310" r="6"/></g>
+    <path d="M260 462h160M340 414v48" stroke="#36515B" stroke-width="14" stroke-linecap="round"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" fill="#F4FBFF">
+    <text x="106" y="150" font-size="24" letter-spacing="7" fill="#23D9E8">TEEVCLEAN / SYSTEM UTILITY</text>
+    <text x="106" y="260" font-size="72" font-weight="700">Make your TV</text>
+    <text x="106" y="344" font-size="72" font-weight="700">feel fast again.</text>
+    <text x="110" y="410" font-size="27" fill="#A9BAC2">Scan storage. Clear clutter. Keep moving.</text>
+    <rect x="106" y="482" width="210" height="68" rx="34" fill="#8CFF72"/>
+    <text x="161" y="526" font-size="25" font-weight="700" fill="#0B1717">SCAN TV</text>
+  </g>
+  <g fill="#FFC857" opacity=".8"><circle cx="650" cy="164" r="5"/><circle cx="710" cy="196" r="8"/><circle cx="620" cy="222" r="4"/></g>
+</svg>

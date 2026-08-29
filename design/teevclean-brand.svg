@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">TeeVClean launcher icon</title>
+  <desc id="desc">A graphite television with an electric cyan scan beam, green sparkle, and clean signal.</desc>
+  <defs>
+    <linearGradient id="screen" x1="64" y1="58" x2="448" y2="438" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182A36"/>
+      <stop offset="1" stop-color="#0D171F"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="100" y1="364" x2="394" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#23D9E8" stop-opacity="0"/>
+      <stop offset=".45" stop-color="#23D9E8" stop-opacity=".78"/>
+      <stop offset="1" stop-color="#8CFF72"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="13" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="#101820"/>
+  <rect x="54" y="78" width="404" height="302" rx="45" fill="url(#screen)" stroke="#314552" stroke-width="12"/>
+  <path d="M163 422h186M256 380v42" stroke="#314552" stroke-width="16" stroke-linecap="round"/>
+  <path d="M94 355 400 101" stroke="url(#beam)" stroke-width="31" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M101 347 392 106" stroke="#BDFEFF" stroke-width="5" stroke-linecap="round" opacity=".92"/>
+  <circle cx="394" cy="103" r="19" fill="#8CFF72" filter="url(#glow)"/>
+  <path d="M394 66v74M357 103h74M368 77l52 52M420 77l-52 52" stroke="#F4FBFF" stroke-width="7" stroke-linecap="round"/>
+  <g fill="#FFC857" opacity=".9">
+    <circle cx="144" cy="265" r="7"/><circle cx="184" cy="297" r="5"/><circle cx="126" cy="311" r="4"/>
+  </g>
+</svg>

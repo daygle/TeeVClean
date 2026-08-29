@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="teevclean_graphite">#101820</color>
+    <color name="teevclean_screen">#0D171F</color>
+    <color name="teevclean_cyan">#23D9E8</color>
+    <color name="teevclean_green">#8CFF72</color>
+    <color name="teevclean_amber">#FFC857</color>
+    <color name="teevclean_white">#F4FBFF</color>
+</resources>
