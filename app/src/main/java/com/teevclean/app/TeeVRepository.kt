@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
+import androidx.annotation.RequiresPermission
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -88,12 +89,21 @@ class TeeVRepository(private val context: Context) {
         }.sortedByDescending { it.size }
     }
 
+    @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS)
+    private fun readLastUsedByPackage(usage: UsageStatsManager?, since: Long): Map<String, Long> =
+        usage?.queryUsageStats(UsageStatsManager.INTERVAL_MONTHLY, since, System.currentTimeMillis())
+            ?.associate { it.packageName to it.lastTimeUsed }
+            .orEmpty()
+
     suspend fun loadApps(): List<AppSummary> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
         val usage = context.getSystemService(UsageStatsManager::class.java)
         val since = System.currentTimeMillis() - 180L * 24 * 60 * 60 * 1000
-        val lastUsed = usage?.queryUsageStats(UsageStatsManager.INTERVAL_MONTHLY, since, System.currentTimeMillis())
-            ?.associate { it.packageName to it.lastTimeUsed }.orEmpty()
+        val lastUsed = try {
+            readLastUsedByPackage(usage, since)
+        } catch (_: SecurityException) {
+            emptyMap()
+        }
 
         pm.getInstalledApplications(0)
             .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }

@@ -11,6 +11,8 @@
 
     <!-- Necessary for a device assistant/cleaner to list installed apps for size review -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <!-- User-granted special access used to display optional last-used app data. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <application
         android:theme="@style/Theme.TeeVClean"
