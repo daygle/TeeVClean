@@ -194,7 +194,7 @@ private fun ResultRow(title: String, subtitle: String, amount: String, safe: Boo
 private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("Large files", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold); Text("Review files in shared storage. Unknown files are never deleted automatically.", color = Muted, fontSize = 16.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { listOf("Over 500 MB", "Older than 30 days", "Downloads").forEach { Text(it, Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Lime).padding(horizontal = 18.dp, vertical = 10.dp)) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { listOf("Over 500 MB", "Older than 30 days", "Downloads").forEach { Text(it, color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Lime).padding(horizontal = 18.dp, vertical = 10.dp)) } }
         if (files.isEmpty()) Text("No large files were found in the accessible Downloads and media folders.", color = Muted, fontSize = 15.sp) else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(files.take(10)) { file -> ResultRow(file.name, file.path, formatBytes(file.size), false) } }
         Button(onClick = onPickFolder) { Text("Choose folder to scan") }
         Text("Folder access uses Android's Storage Access Framework. You stay in control of the location.", color = Muted, fontSize = 13.sp)
