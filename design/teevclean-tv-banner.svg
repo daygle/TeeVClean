@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <defs>
+    <radialGradient id="halo" cx="80%" cy="22%" r="70%" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B7F35B" stop-opacity=".13"/><stop offset="1" stop-color="#B7F35B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="360" fill="#101311"/>
+  <rect width="640" height="360" fill="url(#halo)"/>
+
+  <!-- TV mark -->
+  <g transform="translate(-8 51) scale(0.5)">
+    <rect x="114" y="133" width="284" height="199" rx="47" fill="#1E2A1B"/>
+    <rect x="138" y="156" width="236" height="152" rx="28" fill="#0E1510"/>
+    <path d="M171 242 L218 289 L313 190" fill="none" stroke="#B7F35B" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M346 187 L353 202 L367 209 L353 215 L346 230 L339 215 L325 209 L339 202 Z" fill="#B7F35B"/>
+    <path d="M232 332 H280 L285 360 H228 Z" fill="#1E2A1B"/>
+    <rect x="175" y="360" width="162" height="24" rx="12" fill="#1E2A1B"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    <text x="212" y="196" font-size="66" fill="#FFFFFF">TeeV<tspan fill="#B7F35B">Clean</tspan></text>
+  </g>
+  <text x="215" y="232" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#9BA79C" letter-spacing="1">Clean up your Android TV, safely.</text>
+</svg>

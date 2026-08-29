@@ -1,35 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 720" role="img" aria-labelledby="title desc">
-  <title id="title">TeeVClean clean TV banner</title>
-  <desc id="desc">A modern Android TV cleaning banner with a scanning beam clearing storage clutter.</desc>
+  <title id="title">TeeVClean banner</title>
+  <desc id="desc">A modern Android TV cleaning banner with the TeeVClean television mark and a lime clean-sweep checkmark.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="720" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0B1118"/><stop offset=".58" stop-color="#101E29"/><stop offset="1" stop-color="#122D34"/>
+      <stop stop-color="#0C0F0C"/><stop offset=".6" stop-color="#101311"/><stop offset="1" stop-color="#141A12"/>
     </linearGradient>
-    <linearGradient id="scan" x1="510" y1="574" x2="1218" y2="118" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#23D9E8" stop-opacity="0"/><stop offset=".72" stop-color="#23D9E8" stop-opacity=".72"/><stop offset="1" stop-color="#8CFF72"/>
-    </linearGradient>
+    <radialGradient id="halo" cx="78%" cy="30%" r="60%" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B7F35B" stop-opacity=".16"/><stop offset="1" stop-color="#B7F35B" stop-opacity="0"/>
+    </radialGradient>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="24"/></filter>
   </defs>
+
   <rect width="1600" height="720" rx="36" fill="url(#bg)"/>
-  <circle cx="1280" cy="170" r="180" fill="#23D9E8" opacity=".08" filter="url(#soft)"/>
-  <circle cx="1410" cy="620" r="220" fill="#8CFF72" opacity=".06" filter="url(#soft)"/>
-  <g transform="translate(760 112) rotate(-8)">
-    <rect width="680" height="414" rx="52" fill="#0D171F" stroke="#36515B" stroke-width="12"/>
-    <rect x="28" y="28" width="624" height="358" rx="34" fill="#142832"/>
-    <path d="M50 350 630 66" stroke="url(#scan)" stroke-width="38" stroke-linecap="round" filter="url(#soft)"/>
-    <path d="M52 346 626 69" stroke="#BDFEFF" stroke-width="6" stroke-linecap="round"/>
-    <circle cx="630" cy="68" r="18" fill="#8CFF72"/>
-    <path d="M630 35v66M597 68h66" stroke="#F4FBFF" stroke-width="7" stroke-linecap="round"/>
-    <g fill="#FFC857"><circle cx="136" cy="264" r="10"/><circle cx="198" cy="298" r="7"/><circle cx="108" cy="310" r="6"/></g>
-    <path d="M260 462h160M340 414v48" stroke="#36515B" stroke-width="14" stroke-linecap="round"/>
+  <rect width="1600" height="720" rx="36" fill="url(#halo)"/>
+  <circle cx="1240" cy="180" r="200" fill="#B7F35B" opacity=".07" filter="url(#soft)"/>
+
+  <!-- App mark -->
+  <g transform="translate(1000 130) scale(0.9)">
+    <rect x="114" y="133" width="284" height="199" rx="47" fill="#1E2A1B"/>
+    <rect x="138" y="156" width="236" height="152" rx="28" fill="#0E1510"/>
+    <path d="M171 242 L218 289 L313 190" fill="none" stroke="#B7F35B" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M346 187 L353 202 L367 209 L353 215 L346 230 L339 215 L325 209 L339 202 Z" fill="#B7F35B"/>
+    <path d="M232 332 H280 L285 360 H228 Z" fill="#1E2A1B"/>
+    <rect x="175" y="360" width="162" height="24" rx="12" fill="#1E2A1B"/>
   </g>
-  <g font-family="Arial, Helvetica, sans-serif" fill="#F4FBFF">
-    <text x="106" y="150" font-size="24" letter-spacing="7" fill="#23D9E8">TEEVCLEAN / SYSTEM UTILITY</text>
-    <text x="106" y="260" font-size="72" font-weight="700">Make your TV</text>
-    <text x="106" y="344" font-size="72" font-weight="700">feel fast again.</text>
-    <text x="110" y="410" font-size="27" fill="#A9BAC2">Scan storage. Clear clutter. Keep moving.</text>
-    <rect x="106" y="482" width="210" height="68" rx="34" fill="#8CFF72"/>
-    <text x="161" y="526" font-size="25" font-weight="700" fill="#0B1717">SCAN TV</text>
+
+  <!-- Copy -->
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="106" y="150" font-size="24" letter-spacing="7" fill="#B7F35B">TEEVCLEAN / ANDROID TV UTILITY</text>
+    <text x="106" y="262" font-size="72" font-weight="700" fill="#FFFFFF">Make your TV</text>
+    <text x="106" y="346" font-size="72" font-weight="700" fill="#FFFFFF">feel fast again.</text>
+    <text x="110" y="412" font-size="27" fill="#9BA79C">Review storage. Clear cache safely. Keep moving.</text>
+    <rect x="106" y="482" width="250" height="68" rx="16" fill="#B7F35B"/>
+    <text x="146" y="526" font-size="25" font-weight="700" fill="#101311">REVIEW &amp; CLEAN</text>
   </g>
-  <g fill="#FFC857" opacity=".8"><circle cx="650" cy="164" r="5"/><circle cx="710" cy="196" r="8"/><circle cx="620" cy="222" r="4"/></g>
 </svg>

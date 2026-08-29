@@ -3,8 +3,19 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Solid Ink Background -->
+
+    <!-- Deep ink base (matches the in-app surface colour) -->
     <path
         android:fillColor="#101311"
         android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Soft lime glow in the upper-right for depth -->
+    <path
+        android:fillColor="#B7F35B"
+        android:fillAlpha="0.10"
+        android:pathData="M82,4m-52,0a52,52 0 1,0 104,0a52,52 0 1,0 -104,0z" />
+    <path
+        android:fillColor="#B7F35B"
+        android:fillAlpha="0.06"
+        android:pathData="M18,96m-40,0a40,40 0 1,0 80,0a40,40 0 1,0 -80,0z" />
 </vector>

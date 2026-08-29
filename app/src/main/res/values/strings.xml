@@ -87,4 +87,22 @@
     <string name="settings_no_folders">No custom folders added yet.</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_about">About TeeVClean</string>
+
+    <string name="action_open">Open</string>
+    <string name="action_review">Review</string>
+    <string name="action_sweep">Sweep</string>
+    <string name="temp_and_logs">Temp &amp; Log Files</string>
+    <string name="temp_and_logs_desc">Remove leftover temp, log and thumbnail files in the folders you added.</string>
+    <string name="free_up_space">Open Android “Free up space”</string>
+    <string name="delete">Delete</string>
+    <string name="confirm_delete_file">Delete this file?</string>
+    <string name="confirm_delete_file_desc">%1$s (%2$s) will be permanently deleted from your storage. This cannot be undone.</string>
+    <string name="confirm_sweep_desc">Remove leftover temp, log and thumbnail files, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
+    <string name="cleanup_complete">Cleanup Complete</string>
+    <string name="cleanup_nothing">Everything was already clean — nothing to remove.</string>
+    <string name="done">Done</string>
+    <plurals name="cleanup_freed">
+        <item quantity="one">Freed %1$s across %2$d item.</item>
+        <item quantity="other">Freed %1$s across %2$d items.</item>
+    </plurals>
 </resources>

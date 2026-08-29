@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
                 it,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
+            viewModel.addCustomFolder(it)
         }
     }
 
@@ -74,12 +75,28 @@ class MainActivity : ComponentActivity() {
 fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
     var showCleanup by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
+    var showSweep by remember { mutableStateOf(false) }
+    var cleanupResult by remember { mutableStateOf<CleanupResult?>(null) }
     val context = LocalContext.current
 
     if (showCleanup) {
         CleanupDialog(viewModel.cacheSize, onDismiss = { showCleanup = false }) {
-            viewModel.clearCache { showCleanup = false }
+            viewModel.clearCache { result ->
+                showCleanup = false
+                cleanupResult = result
+            }
         }
+    }
+    if (showSweep) {
+        SweepDialog(onDismiss = { showSweep = false }) {
+            viewModel.sweepJunk { result ->
+                showSweep = false
+                cleanupResult = result
+            }
+        }
+    }
+    cleanupResult?.let { result ->
+        CleanupResultDialog(result) { cleanupResult = null }
     }
     if (showSchedule) {
         ScheduleDialog(viewModel.scheduleEnabled, onDismiss = { showSchedule = false }) { enabled ->
@@ -100,7 +117,15 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                     Box(Modifier.weight(1f)) {
                         when (viewModel.currentScreen) {
                             Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, { showCleanup = true }) { viewModel.currentScreen = it }
-                            Screen.CLEAN -> CleanupScreen(viewModel.cacheSize, onReview = { showCleanup = true }, onSchedule = { showSchedule = true }, scheduleEnabled = viewModel.scheduleEnabled) { viewModel.currentScreen = it }
+                            Screen.CLEAN -> CleanupScreen(
+                                cacheSize = viewModel.cacheSize,
+                                onReview = { showCleanup = true },
+                                onSchedule = { showSchedule = true },
+                                onSweep = { showSweep = true },
+                                onFreeUpSpace = { viewModel.openStorageManager() },
+                                scheduleEnabled = viewModel.scheduleEnabled,
+                                onNavigate = { viewModel.currentScreen = it },
+                            )
                             Screen.LARGE -> {
                                 if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty()) {
                                     PermissionRationale(
@@ -109,7 +134,9 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                         onPickFolder
                                     )
                                 } else {
-                                    LargeFilesScreen(viewModel.largeFiles, onPickFolder)
+                                    LargeFilesScreen(viewModel.largeFiles, onPickFolder) { uri ->
+                                        viewModel.deleteLargeFile(uri)
+                                    }
                                 }
                             }
                             Screen.APPS -> {
@@ -194,27 +221,83 @@ Screen.HEALTH.icon
 }
 
 @Composable
-private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () -> Unit, scheduleEnabled: Boolean, onNavigate: (Screen) -> Unit) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text(stringResource(R.string.safe_cleanup), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.safe_cleanup_desc), color = Muted, fontSize = 16.sp)
-        Spacer(Modifier.height(12.dp))
-        ResultRow(stringResource(R.string.this_app_cache), stringResource(R.string.this_app_cache_desc), formatBytes(cacheSize), true)
-        ResultRow(stringResource(R.string.other_app_caches), stringResource(R.string.other_app_caches_desc), "Guided", false)
-        ResultRow(stringResource(R.string.downloads_and_media), stringResource(R.string.downloads_and_media_desc), "User choice", false)
-        Spacer(Modifier.height(10.dp))
-        TvButton(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
-        TvTextButton(onClick = onSchedule) {
-            Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup))
+private fun CleanupScreen(
+    cacheSize: Long,
+    onReview: () -> Unit,
+    onSchedule: () -> Unit,
+    onSweep: () -> Unit,
+    onFreeUpSpace: () -> Unit,
+    scheduleEnabled: Boolean,
+    onNavigate: (Screen) -> Unit,
+) {
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        item {
+            Text(stringResource(R.string.safe_cleanup), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.safe_cleanup_desc), color = Muted, fontSize = 16.sp)
         }
-        TvTextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
-            Text(stringResource(R.string.overview))
+        item { ResultRow(stringResource(R.string.this_app_cache), stringResource(R.string.this_app_cache_desc), formatBytes(cacheSize), true) }
+        item {
+            ActionRow(
+                stringResource(R.string.other_app_caches),
+                stringResource(R.string.other_app_caches_desc),
+                stringResource(R.string.action_open),
+            ) { onNavigate(Screen.APPS) }
+        }
+        item {
+            ActionRow(
+                stringResource(R.string.downloads_and_media),
+                stringResource(R.string.downloads_and_media_desc),
+                stringResource(R.string.action_review),
+            ) { onNavigate(Screen.LARGE) }
+        }
+        item {
+            ActionRow(
+                stringResource(R.string.temp_and_logs),
+                stringResource(R.string.temp_and_logs_desc),
+                stringResource(R.string.action_sweep),
+                onClick = onSweep,
+            )
+        }
+        item {
+            Spacer(Modifier.height(2.dp))
+            TvButton(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
+        }
+        item {
+            TvTextButton(onClick = onFreeUpSpace) { Text(stringResource(R.string.free_up_space)) }
+        }
+        item {
+            TvTextButton(onClick = onSchedule) {
+                Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup))
+            }
+        }
+        item {
+            TvTextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
+                Text(stringResource(R.string.overview))
+            }
         }
     }
 }
 
 @Composable
-private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit) {
+private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit, onDelete: (String) -> Unit) {
+    var pendingDelete by remember { mutableStateOf<FileSummary?>(null) }
+
+    pendingDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.confirm_delete_file)) },
+            text = { Text(stringResource(R.string.confirm_delete_file_desc, file.name, formatBytes(file.size))) },
+            confirmButton = {
+                TvButton(onClick = {
+                    onDelete(file.uri)
+                    pendingDelete = null
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = { TvTextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
@@ -228,7 +311,18 @@ private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                 items(files.take(20)) { file ->
-                    ResultRow(file.name, file.path, formatBytes(file.size), false)
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(file.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                            Text(file.path, color = Muted, fontSize = 14.sp, maxLines = 1)
+                        }
+                        Text(formatBytes(file.size), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(16.dp))
+                        TvTextButton(onClick = { pendingDelete = file }) { Text(stringResource(R.string.delete)) }
+                    }
                 }
             }
         }
@@ -297,6 +391,33 @@ private fun CleanupDialog(cacheSize: Long, onDismiss: () -> Unit, onCleaned: () 
         text = { Text(stringResource(R.string.confirm_cleanup_desc, formatBytes(cacheSize))) },
         confirmButton = { TvButton(onClick = onCleaned) { Text(stringResource(R.string.remove_cache)) } },
         dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
+}
+
+@Composable
+private fun SweepDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.temp_and_logs)) },
+        text = { Text(stringResource(R.string.confirm_sweep_desc)) },
+        confirmButton = { TvButton(onClick = onConfirm) { Text(stringResource(R.string.action_sweep)) } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun CleanupResultDialog(result: CleanupResult, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cleanup_complete)) },
+        text = {
+            if (result.itemsRemoved == 0) {
+                Text(stringResource(R.string.cleanup_nothing))
+            } else {
+                Text(pluralStringResource(R.plurals.cleanup_freed, result.itemsRemoved, formatBytes(result.freedBytes), result.itemsRemoved))
+            }
+        },
+        confirmButton = { TvButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
     )
 }
 
