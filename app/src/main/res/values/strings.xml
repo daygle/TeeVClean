@@ -46,6 +46,9 @@
     <string name="folder_access_disclaimer">Folder access uses Android\'s Storage Access Framework. You stay in control of the location.</string>
 
     <string name="app_review_desc">Apps are sorted by installed APK size. Last-used data may be unavailable without usage access.</string>
+    <string name="app_review_cache_hint">To clear another app\'s cache, open it here, then choose Storage &#8250; Clear cache. Android does not allow apps to clear each other\'s caches directly.</string>
+    <string name="usage_hint_title">Show last-used dates</string>
+    <string name="usage_hint_desc">Grant Usage Access to see when each app was last opened. App sizes and cache guidance work without it.</string>
     <string name="app_info_btn">App Info</string>
 
     <string name="device_health_desc">Practical diagnostics, not RAM booster claims.</string>

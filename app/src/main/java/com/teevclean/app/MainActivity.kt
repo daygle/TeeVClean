@@ -139,18 +139,12 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                     }
                                 }
                             }
-                            Screen.APPS -> {
-                                if (!hasUsageStatsPermission(context)) {
-                                    PermissionRationale(
-                                        stringResource(R.string.permission_required),
-                                        stringResource(R.string.usage_access_rationale)
-                                    ) {
-                                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                                    }
-                                } else {
-                                    AppReviewScreen(viewModel.apps) { viewModel.openAppInfo(it) }
-                                }
-                            }
+                            Screen.APPS -> AppReviewScreen(
+                                apps = viewModel.apps,
+                                hasUsageAccess = hasUsageStatsPermission(context),
+                                onEnableUsage = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+                                onOpenInfo = { viewModel.openAppInfo(it) },
+                            )
                             Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
                             Screen.SETTINGS -> SettingsScreen(
                                 viewModel.scheduleEnabled,
@@ -332,11 +326,27 @@ private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit,
 }
 
 @Composable
-private fun AppReviewScreen(apps: List<AppSummary>, onOpenInfo: (String) -> Unit) {
+private fun AppReviewScreen(
+    apps: List<AppSummary>,
+    hasUsageAccess: Boolean,
+    onEnableUsage: () -> Unit,
+    onOpenInfo: (String) -> Unit,
+) {
     Column(Modifier.fillMaxSize()) {
         Text(stringResource(R.string.app_review), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.app_review_desc), color = Muted, fontSize = 16.sp)
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.app_review_cache_hint), color = Muted, fontSize = 13.sp)
+        if (!hasUsageAccess) {
+            Spacer(Modifier.height(14.dp))
+            ActionRow(
+                stringResource(R.string.usage_hint_title),
+                stringResource(R.string.usage_hint_desc),
+                stringResource(R.string.enable),
+                onClick = onEnableUsage,
+            )
+        }
         Spacer(Modifier.height(20.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(apps.take(15)) { app ->
