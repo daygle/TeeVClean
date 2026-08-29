@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- TV Silhouette -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M22,34c0,-2.2 1.8,-4 4,-4h60c2.2,0 4,1.8 4,4v36c0,2.2 -1.8,4 -4,4h-60c-2.2,0 -4,-1.8 -4,-4z" />
+
+    <!-- Checkmark cutout/overlay -->
+    <path
+        android:pathData="M40,52l10,10l25,-25"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

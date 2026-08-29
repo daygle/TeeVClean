@@ -6,13 +6,19 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.app.AppOpsManager
+import android.content.pm.PackageManager
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -84,15 +90,49 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Ink) {
-            Row(Modifier.fillMaxSize().padding(44.dp)) {
-                Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
-                Spacer(Modifier.width(38.dp))
-                when (viewModel.currentScreen) {
-                    Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles) { showCleanup = true }
-                    Screen.CLEAN -> CleanupScreen(viewModel.cacheSize, onReview = { showCleanup = true }, onSchedule = { showSchedule = true }, scheduleEnabled = viewModel.scheduleEnabled)
-                    Screen.LARGE -> LargeFilesScreen(viewModel.largeFiles, onPickFolder)
-                    Screen.APPS -> AppReviewScreen(viewModel.apps) { viewModel.openAppInfo(it) }
-                    Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
+            Column {
+                if (viewModel.isRefreshing) {
+                    LoadingOverlay()
+                }
+                Row(Modifier.fillMaxSize().padding(44.dp)) {
+                    Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
+                    Spacer(Modifier.width(38.dp))
+                    Box(Modifier.weight(1f)) {
+                        when (viewModel.currentScreen) {
+                            Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles) { showCleanup = true }
+                            Screen.CLEAN -> CleanupScreen(viewModel.cacheSize, onReview = { showCleanup = true }, onSchedule = { showSchedule = true }, scheduleEnabled = viewModel.scheduleEnabled)
+                            Screen.LARGE -> {
+                                if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty()) {
+                                    PermissionRationale(
+                                        stringResource(R.string.large_files),
+                                        stringResource(R.string.storage_access_rationale),
+                                        onPickFolder
+                                    )
+                                } else {
+                                    LargeFilesScreen(viewModel.largeFiles, onPickFolder)
+                                }
+                            }
+                            Screen.APPS -> {
+                                if (!hasUsageStatsPermission(context)) {
+                                    PermissionRationale(
+                                        stringResource(R.string.permission_required),
+                                        stringResource(R.string.usage_access_rationale)
+                                    ) {
+                                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                                    }
+                                } else {
+                                    AppReviewScreen(viewModel.apps) { viewModel.openAppInfo(it) }
+                                }
+                            }
+                            Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
+                            Screen.SETTINGS -> SettingsScreen(
+                                viewModel.scheduleEnabled,
+                                viewModel.customFolders,
+                                { viewModel.toggleSchedule(it) },
+                                { viewModel.removeCustomFolder(it) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -103,16 +143,16 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
 private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, onClean: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item {
-            Text("Good evening, ready to tidy up?", color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.greeting), color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(7.dp))
-            Text("A calmer, cleaner TV starts here.", color = Muted, fontSize = 16.sp)
+            Text(stringResource(R.string.sub_greeting), color = Muted, fontSize = 16.sp)
             Spacer(Modifier.height(28.dp))
             StorageCard(storage, onClean)
         }
-        item { Text("Safe tools for a healthier TV", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
-        item { FeatureCard("Large Files", "Review downloads and media before deleting", "Files", if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
-        item { FeatureCard("App Review", "${apps.size} apps; review size and open Android app info", "Apps", "Guided") }
-        item { FeatureCard("Device Health", "Storage pressure, network, uptime and system details", "Health", "Check") }
+        item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
+        item { FeatureCard(stringResource(R.string.large_files), stringResource(R.string.feature_large_files_desc), "Files", if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size })) }
+        item { FeatureCard(stringResource(R.string.app_review), stringResource(R.string.feature_app_review_desc, apps.size), "Apps", "Guided") }
+        item { FeatureCard(stringResource(R.string.device_health), stringResource(R.string.feature_device_health_desc), "Health", "Check") }
         item {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp),
@@ -121,8 +161,8 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                 Text("✦", color = Lime, fontSize = 28.sp)
                 Spacer(Modifier.width(16.dp))
                 Column {
-                    Text("Your privacy comes first", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text("No silent deletion and no fake RAM boosts. You approve every cleanup action.", color = Color(0xFFC4D1C2), fontSize = 13.sp)
+                    Text(stringResource(R.string.privacy_title), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(stringResource(R.string.privacy_desc), color = Color(0xFFC4D1C2), fontSize = 13.sp)
                 }
             }
         }
@@ -132,16 +172,16 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
 @Composable
 private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () -> Unit, scheduleEnabled: Boolean) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Safe Cleanup", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text("Scan temporary files and review every item before removal.", color = Muted, fontSize = 16.sp)
+        Text(stringResource(R.string.safe_cleanup), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.safe_cleanup_desc), color = Muted, fontSize = 16.sp)
         Spacer(Modifier.height(12.dp))
-        ResultRow("This App's Cache", "Safe to remove; app data and user files stay intact", formatBytes(cacheSize), true)
-        ResultRow("Other App Caches", "Android requires each app's own info page.", "Guided", false)
-        ResultRow("Downloads and Media", "Select files in the large-file review.", "User choice", false)
+        ResultRow(stringResource(R.string.this_app_cache), stringResource(R.string.this_app_cache_desc), formatBytes(cacheSize), true)
+        ResultRow(stringResource(R.string.other_app_caches), stringResource(R.string.other_app_caches_desc), "Guided", false)
+        ResultRow(stringResource(R.string.downloads_and_media), stringResource(R.string.downloads_and_media_desc), "User choice", false)
         Spacer(Modifier.height(10.dp))
-        Button(onClick = onReview) { Text("Review Cleanup Plan") }
+        Button(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
         TextButton(onClick = onSchedule) {
-            Text(if (scheduleEnabled) "Scheduled Cleanup: Weekly" else "Schedule Weekly Cleanup")
+            Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup))
         }
     }
 }
@@ -149,33 +189,33 @@ private fun CleanupScreen(cacheSize: Long, onReview: () -> Unit, onSchedule: () 
 @Composable
 private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Large Files", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text("Review files in shared storage. Unknown files are never deleted automatically.", color = Muted, fontSize = 16.sp)
+        Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf("Over 500 MB", "Older Than 30 Days", "Downloads").forEach {
+            listOf(stringResource(R.string.filter_over_500mb), stringResource(R.string.filter_older_30days), stringResource(R.string.filter_downloads)).forEach {
                 Text(it, color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Lime).padding(horizontal = 18.dp, vertical = 10.dp))
             }
         }
         if (files.isEmpty()) {
-            Text("No large files were found in the accessible Downloads and media folders.", color = Muted, fontSize = 15.sp)
+            Text(stringResource(R.string.no_large_files), color = Muted, fontSize = 15.sp)
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                 items(files.take(20)) { file ->
                     ResultRow(file.name, file.path, formatBytes(file.size), false)
                 }
             }
         }
-        Button(onClick = onPickFolder) { Text("Choose Folder to Scan") }
-        Text("Folder access uses Android's Storage Access Framework. You stay in control of the location.", color = Muted, fontSize = 13.sp)
+        Button(onClick = onPickFolder) { Text(stringResource(R.string.choose_folder_to_scan)) }
+        Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 13.sp)
     }
 }
 
 @Composable
 private fun AppReviewScreen(apps: List<AppSummary>, onOpenInfo: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Text("App Review", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.app_review), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text("Apps are sorted by installed APK size. Last-used data may be unavailable without usage access.", color = Muted, fontSize = 16.sp)
+        Text(stringResource(R.string.app_review_desc), color = Muted, fontSize = 16.sp)
         Spacer(Modifier.height(20.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(apps.take(15)) { app ->
@@ -189,7 +229,7 @@ private fun AppReviewScreen(apps: List<AppSummary>, onOpenInfo: (String) -> Unit
                     }
                     Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(16.dp))
-                    TextButton(onClick = { onOpenInfo(app.packageName) }) { Text("App Info") }
+                    TextButton(onClick = { onOpenInfo(app.packageName) }) { Text(stringResource(R.string.app_info_btn)) }
                 }
             }
         }
@@ -201,13 +241,13 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
     val manager = context.getSystemService(ConnectivityManager::class.java)
     val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Device Health", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text("Practical diagnostics, not RAM booster claims.", color = Muted, fontSize = 16.sp)
-        ResultRow("Storage Pressure", if (storage.fraction > .85) "Low space — review large files." else "Healthy free-space margin.", "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f)
-        ResultRow("Network", if (network) "Internet connection detected." else "No active internet connection.", if (network) "Connected" else "Offline", network)
-        ResultRow("System Uptime", "Time since the device last booted.", formatDuration(SystemClock.elapsedRealtime()), true)
-        ResultRow("Android Version", "${Build.MANUFACTURER} ${Build.MODEL}", "Android ${Build.VERSION.RELEASE}", true)
-        Text("Thermal readings vary by TV manufacturer and are not exposed on every device.", color = Muted, fontSize = 13.sp)
+        Text(stringResource(R.string.device_health), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.device_health_desc), color = Muted, fontSize = 16.sp)
+        ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f)
+        ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network)
+        ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true)
+        ResultRow(stringResource(R.string.android_version), "${Build.MANUFACTURER} ${Build.MODEL}", "Android ${Build.VERSION.RELEASE}", true)
+        Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp)
     }
 }
 
@@ -215,10 +255,10 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
 private fun ScheduleDialog(enabled: Boolean, onDismiss: () -> Unit, onSave: (Boolean) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Scheduled Cleanup") },
-        text = { Text(if (enabled) "A weekly cleanup will clear only TeeVClean's own cache. Other apps, downloads, photos, and personal files are never touched." else "Schedule a weekly cleanup of TeeVClean's own cache. This does not delete user files or clear other apps' caches.") },
-        confirmButton = { Button(onClick = { onSave(!enabled) }) { Text(if (enabled) "Turn Off" else "Enable") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        title = { Text(stringResource(R.string.scheduled_cleanup_title)) },
+        text = { Text(if (enabled) stringResource(R.string.scheduled_cleanup_enabled_desc) else stringResource(R.string.scheduled_cleanup_disabled_desc)) },
+        confirmButton = { Button(onClick = { onSave(!enabled) }) { Text(if (enabled) stringResource(R.string.turn_off) else stringResource(R.string.enable)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -226,15 +266,26 @@ private fun ScheduleDialog(enabled: Boolean, onDismiss: () -> Unit, onSave: (Boo
 private fun CleanupDialog(cacheSize: Long, onDismiss: () -> Unit, onCleaned: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Confirm Safe Cleanup") },
-        text = { Text("Only TeeVClean's own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: ${formatBytes(cacheSize)}.") },
-        confirmButton = { Button(onClick = onCleaned) { Text("Remove Cache") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        title = { Text(stringResource(R.string.confirm_safe_cleanup)) },
+        text = { Text(stringResource(R.string.confirm_cleanup_desc, formatBytes(cacheSize))) },
+        confirmButton = { Button(onClick = onCleaned) { Text(stringResource(R.string.remove_cache)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
+private fun hasUsageStatsPermission(context: Context): Boolean {
+    val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
+    } else {
+        appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
+    }
+    return mode == AppOpsManager.MODE_ALLOWED
+}
+
+@Composable
 private fun lastUsedText(timestamp: Long): String =
-    if (timestamp == 0L) "Last used unavailable" else "Last used ${java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(timestamp)}"
+    if (timestamp == 0L) stringResource(R.string.last_used_unavailable) else stringResource(R.string.last_used_at, java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(timestamp))
 
 private fun formatDuration(milliseconds: Long): String {
     val hours = milliseconds.coerceAtLeast(0L) / 3_600_000

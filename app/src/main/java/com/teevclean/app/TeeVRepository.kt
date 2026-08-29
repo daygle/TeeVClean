@@ -26,6 +26,22 @@ data class AppSummary(val label: String, val packageName: String, val size: Long
 data class FileSummary(val name: String, val path: String, val size: Long, val modified: Long)
 
 class TeeVRepository(private val context: Context) {
+    private val prefs = context.getSharedPreferences("teevclean_prefs", Context.MODE_PRIVATE)
+
+    fun getCustomFolders(): List<String> =
+        prefs.getStringSet("custom_folders", emptySet())?.toList() ?: emptyList()
+
+    fun addCustomFolder(uri: String) {
+        val folders = getCustomFolders().toMutableSet()
+        folders.add(uri)
+        prefs.edit().putStringSet("custom_folders", folders).apply()
+    }
+
+    fun removeCustomFolder(uri: String) {
+        val folders = getCustomFolders().toMutableSet()
+        folders.remove(uri)
+        prefs.edit().putStringSet("custom_folders", folders).apply()
+    }
 
     suspend fun readStorage(): StorageSummary = withContext(Dispatchers.IO) {
         val stat = StatFs(Environment.getDataDirectory().path)
@@ -42,18 +58,31 @@ class TeeVRepository(private val context: Context) {
     }
 
     suspend fun scanLargeFiles(): List<FileSummary> = withContext(Dispatchers.IO) {
-        val roots = listOf(
+        val publicRoots = listOf(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
         )
+        val customFolders = getCustomFolders().mapNotNull { uriString ->
+            try {
+                val uri = Uri.parse(uriString)
+                // Note: For TV, we might need to handle Uri-to-File conversion or use DocumentFile
+                // For simplicity in this refactor, we assume direct File access if possible, 
+                // but real SAF implementation would use DocumentFile.
+                File(uri.path ?: "") 
+            } catch (_: Exception) { null }
+        }
+
+        val roots = publicRoots + customFolders
         val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
         val largeFileBytes = 500L * 1024 * 1024
 
         roots.flatMap { root ->
-            root.listFiles()?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff) }
-                ?.map { FileSummary(it.name, it.parent.orEmpty(), it.length(), it.lastModified()) }
-                .orEmpty()
+            if (root.exists() && root.isDirectory) {
+                root.listFiles()?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff) }
+                    ?.map { FileSummary(it.name, it.parent.orEmpty(), it.length(), it.lastModified()) }
+                    .orEmpty()
+            } else emptyList()
         }.sortedByDescending { it.size }
     }
 

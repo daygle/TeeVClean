@@ -9,12 +9,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 
-enum class Screen(val label: String) {
-    OVERVIEW("Overview"),
-    CLEAN("Safe Cleanup"),
-    LARGE("Large Files"),
-    APPS("App Review"),
-    HEALTH("Device Health")
+enum class Screen(val labelRes: Int) {
+    OVERVIEW(R.string.overview),
+    CLEAN(R.string.safe_cleanup),
+    LARGE(R.string.large_files),
+    APPS(R.string.app_review),
+    HEALTH(R.string.device_health),
+    SETTINGS(R.string.settings)
 }
 
 class TeeVViewModel(application: Application) : AndroidViewModel(application) {
@@ -24,6 +25,7 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
     var storageSummary by mutableStateOf(StorageSummary(0, 0))
     var apps by mutableStateOf(emptyList<AppSummary>())
     var largeFiles by mutableStateOf(emptyList<FileSummary>())
+    var customFolders by mutableStateOf(repository.getCustomFolders())
     var scheduleEnabled by mutableStateOf(repository.isCleanupScheduled())
     var cacheSize by mutableLongStateOf(0L)
     var isRefreshing by mutableStateOf(false)
@@ -40,7 +42,22 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
             largeFiles = repository.scanLargeFiles()
             cacheSize = repository.getCacheSize()
             scheduleEnabled = repository.isCleanupScheduled()
+            customFolders = repository.getCustomFolders()
             isRefreshing = false
+        }
+    }
+
+    fun addCustomFolder(uri: android.net.Uri) {
+        viewModelScope.launch {
+            repository.addCustomFolder(uri.toString())
+            refreshData()
+        }
+    }
+
+    fun removeCustomFolder(path: String) {
+        viewModelScope.launch {
+            repository.removeCustomFolder(path)
+            refreshData()
         }
     }
 

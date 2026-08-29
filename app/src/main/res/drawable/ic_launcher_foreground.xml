@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- TV Outer Frame -->
+    <path
+        android:fillColor="#1F2621"
+        android:pathData="M22,34c0,-2.2 1.8,-4 4,-4h60c2.2,0 4,1.8 4,4v36c0,2.2 -1.8,4 -4,4h-60c-2.2,0 -4,-1.8 -4,-4z" />
+
+    <!-- TV Screen Area -->
+    <path
+        android:fillColor="#101311"
+        android:pathData="M26,34h56v32h-56z" />
+
+    <!-- TV Stand Base -->
+    <path
+        android:fillColor="#1F2621"
+        android:pathData="M44,74l4,4h12l4,-4z" />
+
+    <!-- Large Lime Checkmark (The 'V' in TeeV) -->
+    <path
+        android:pathData="M40,52l10,10l25,-25"
+        android:strokeColor="#B7F35B"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

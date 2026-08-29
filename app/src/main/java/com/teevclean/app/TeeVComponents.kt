@@ -22,7 +22,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,27 +59,10 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
             Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(62.dp))
-        Screen.entries.forEach { screen -> NavItem(screen, selected, onSelect) }
+        Screen.entries.filter { it != Screen.SETTINGS }.forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
-        val settingsInteractionSource = remember { MutableInteractionSource() }
-        val isSettingsFocused by settingsInteractionSource.collectIsFocusedAsState()
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 5.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (isSettingsFocused) PanelLight else Color.Transparent)
-                .border(
-                    if (isSettingsFocused) 2.dp else 0.dp,
-                    if (isSettingsFocused) Lime else Color.Transparent,
-                    RoundedCornerShape(14.dp)
-                )
-                .focusable(interactionSource = settingsInteractionSource),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Outlined.Settings, null, tint = if (isSettingsFocused) Color.White else Muted, modifier = Modifier.padding(18.dp).size(18.dp)); Text("Settings", color = if (isSettingsFocused) Color.White else Muted, fontSize = 15.sp)
-        }
-        Text("TV Cleaner  •  v1.0", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
+        NavItem(Screen.SETTINGS, selected, onSelect)
+        Text(stringResource(R.string.version_footer, "1.0"), color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
     }
 }
 
@@ -97,8 +87,13 @@ fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
             .clickable(onClick = { onSelect(screen) }),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.width(4.dp).height(34.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Lime else Color.Transparent))
-        Text(screen.label, color = if (active || isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+        if (screen == Screen.SETTINGS) {
+            Icon(Icons.Outlined.Settings, null, tint = if (isFocused || active) Color.White else Muted, modifier = Modifier.padding(start = 18.dp).size(18.dp))
+            Text(stringResource(screen.labelRes), color = if (active || isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp))
+        } else {
+            Box(Modifier.width(4.dp).height(34.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Lime else Color.Transparent))
+            Text(stringResource(screen.labelRes), color = if (active || isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = if (active || isFocused) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+        }
     }
 }
 
@@ -134,10 +129,78 @@ fun FeatureCard(title: String, subtitle: String, badge: String, amount: String) 
 fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(27.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text("Storage Health", color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text("of ${formatBytes(storage.total)} used", color = Muted, fontSize = 15.sp) }
-            Column(horizontalAlignment = Alignment.End) { Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("available space", color = Muted, fontSize = 13.sp); Spacer(Modifier.height(14.dp)); Button(onClick = onClean) { Text("Review Safe Cleanup") } }
+            Column(Modifier.weight(1f)) { Text(stringResource(R.string.storage_health_label), color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.used_of_total, formatBytes(storage.used), formatBytes(storage.total)), color = Muted, fontSize = 15.sp) }
+            Column(horizontalAlignment = Alignment.End) { Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.available_space_label), color = Muted, fontSize = 13.sp); Spacer(Modifier.height(14.dp)); Button(onClick = onClean) { Text(stringResource(R.string.review_safe_cleanup)) } }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
+    }
+}
+
+@Composable
+fun SettingsScreen(
+    scheduleEnabled: Boolean,
+    customFolders: List<String>,
+    onToggleSchedule: (Boolean) -> Unit,
+    onRemoveFolder: (String) -> Unit
+) {
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        item {
+            Text(stringResource(R.string.settings), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(16.dp))
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                Text(stringResource(R.string.settings_cleanup_schedule), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup), color = Muted, modifier = Modifier.weight(1f))
+                    Button(onClick = { onToggleSchedule(!scheduleEnabled) }) {
+                        Text(if (scheduleEnabled) stringResource(R.string.turn_off) else stringResource(R.string.enable))
+                    }
+                }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                if (customFolders.isEmpty()) {
+                    Text(stringResource(R.string.settings_no_folders), color = Muted)
+                } else {
+                    customFolders.forEach { folder ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(folder, color = Muted, modifier = Modifier.weight(1f), maxLines = 1)
+                            IconButton(onClick = { onRemoveFolder(folder) }) {
+                                Icon(Icons.Outlined.Delete, null, tint = Color.Red)
+                            }
+                        }
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LoadingOverlay() {
+    Box(Modifier.fillMaxWidth().height(4.dp)) {
+        LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Color.Transparent)
+    }
+}
+
+@Composable
+fun PermissionRationale(title: String, description: String, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        Text(description, color = Muted, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onClick) { Text(stringResource(R.string.enable)) }
     }
 }
 
