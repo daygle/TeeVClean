@@ -106,7 +106,8 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
     var apps by mutableStateOf(emptyList<AppSummary>())
     var largeFiles by mutableStateOf(emptyList<FileSummary>())
     var customFolders by mutableStateOf(repository.getCustomFolders())
-    var scheduleEnabled by mutableStateOf(repository.isCleanupScheduled())
+    var cleanupFrequency by mutableStateOf(repository.getCleanupFrequency())
+    var scheduleSweepEnabled by mutableStateOf(repository.isScheduledSweepEnabled())
     var cacheSize by mutableLongStateOf(0L)
     var isRefreshing by mutableStateOf(false)
     var lastCleanupResult by mutableStateOf<CleanupResult?>(null)
@@ -122,7 +123,8 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
             apps = repository.loadApps()
             largeFiles = repository.scanLargeFiles()
             cacheSize = repository.getCacheSize()
-            scheduleEnabled = repository.isCleanupScheduled()
+            cleanupFrequency = repository.getCleanupFrequency()
+            scheduleSweepEnabled = repository.isScheduledSweepEnabled()
             customFolders = repository.getCustomFolders()
             isRefreshing = false
         }
@@ -170,9 +172,10 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openStorageManager() = repository.openStorageManager()
 
-    fun toggleSchedule(enabled: Boolean) {
-        repository.setCleanupSchedule(enabled)
-        scheduleEnabled = repository.isCleanupScheduled()
+    fun setSchedule(frequency: CleanupFrequency, includeSweep: Boolean) {
+        repository.setCleanupSchedule(frequency, includeSweep)
+        cleanupFrequency = repository.getCleanupFrequency()
+        scheduleSweepEnabled = repository.isScheduledSweepEnabled()
     }
 
     fun openAppInfo(packageName: String) {

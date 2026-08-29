@@ -163,6 +163,40 @@ fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Un
 }
 
 @Composable
+fun SelectableChip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val base = Modifier
+        .clip(RoundedCornerShape(10.dp))
+        .background(if (!enabled) Panel else if (selected) Lime else PanelLight)
+        .border(
+            if (isFocused) 2.dp else 0.dp,
+            if (isFocused) Color.White else Color.Transparent,
+            RoundedCornerShape(10.dp),
+        )
+    val interactive = if (enabled) {
+        base
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onClick()
+                    true
+                } else false
+            }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+    } else {
+        base
+    }
+    Box(interactive.padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+        Text(
+            label,
+            color = if (selected && enabled) Ink else if (enabled) Color.White else Muted,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 fun FeatureCard(
     title: String,
     subtitle: String,
@@ -220,9 +254,9 @@ fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
 
 @Composable
 fun SettingsScreen(
-    scheduleEnabled: Boolean,
+    scheduleSummary: String,
     customFolders: List<String>,
-    onToggleSchedule: (Boolean) -> Unit,
+    onEditSchedule: () -> Unit,
     onRemoveFolder: (String) -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -235,9 +269,9 @@ fun SettingsScreen(
                 Text(stringResource(R.string.settings_cleanup_schedule), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (scheduleEnabled) stringResource(R.string.scheduled_cleanup_weekly) else stringResource(R.string.schedule_weekly_cleanup), color = Muted, modifier = Modifier.weight(1f))
-                    TvButton(onClick = { onToggleSchedule(!scheduleEnabled) }) {
-                        Text(if (scheduleEnabled) stringResource(R.string.turn_off) else stringResource(R.string.enable))
+                    Text(scheduleSummary, color = Muted, modifier = Modifier.weight(1f))
+                    TvButton(onClick = onEditSchedule) {
+                        Text(stringResource(R.string.schedule_change))
                     }
                 }
             }

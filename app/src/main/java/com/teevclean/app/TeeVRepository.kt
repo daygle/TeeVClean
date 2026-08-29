@@ -17,6 +17,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,6 +48,14 @@ data class FileSummary(
 
 /** Outcome of a cleanup action, so the UI can report what was actually removed. */
 data class CleanupResult(val freedBytes: Long, val itemsRemoved: Int)
+
+/** How often the unattended background cleanup runs. [intervalDays] is null when disabled. */
+enum class CleanupFrequency(val intervalDays: Long?) {
+    OFF(null),
+    DAILY(1),
+    WEEKLY(7),
+    MONTHLY(30),
+}
 
 class TeeVRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("teevclean_prefs", Context.MODE_PRIVATE)
@@ -275,22 +284,36 @@ class TeeVRepository(private val context: Context) {
             }.sortedByDescending { it.size }
     }
 
-    fun isCleanupScheduled(): Boolean = try {
-        WorkManager.getInstance(context).getWorkInfosForUniqueWork(WEEKLY_CLEANUP_WORK).get()
-            .any { it.state == androidx.work.WorkInfo.State.ENQUEUED || it.state == androidx.work.WorkInfo.State.RUNNING }
-    } catch (_: Exception) {
-        false
-    }
+    fun getCleanupFrequency(): CleanupFrequency =
+        runCatching {
+            CleanupFrequency.valueOf(prefs.getString(KEY_FREQUENCY, CleanupFrequency.OFF.name)!!)
+        }.getOrDefault(CleanupFrequency.OFF)
 
-    fun setCleanupSchedule(enabled: Boolean) {
+    fun isScheduledSweepEnabled(): Boolean = prefs.getBoolean(KEY_INCLUDE_SWEEP, false)
+
+    /**
+     * Configures the recurring background cleanup. Only unattended-safe actions are ever
+     * scheduled: the app's own cache always, and — when [includeSweep] is set — the temp/log
+     * sweep of folders the user granted. Other apps' caches and user-file deletion are never
+     * automated because they need explicit interaction.
+     */
+    fun setCleanupSchedule(frequency: CleanupFrequency, includeSweep: Boolean) {
+        prefs.edit {
+            putString(KEY_FREQUENCY, frequency.name)
+            putBoolean(KEY_INCLUDE_SWEEP, includeSweep)
+        }
         val manager = WorkManager.getInstance(context)
-        if (!enabled) {
+        val intervalDays = frequency.intervalDays
+        if (intervalDays == null) {
             manager.cancelUniqueWork(WEEKLY_CLEANUP_WORK)
         } else {
+            val request = PeriodicWorkRequestBuilder<CleanupWorker>(intervalDays, TimeUnit.DAYS)
+                .setInputData(workDataOf(INCLUDE_SWEEP to includeSweep))
+                .build()
             manager.enqueueUniquePeriodicWork(
                 WEEKLY_CLEANUP_WORK,
-                ExistingPeriodicWorkPolicy.KEEP,
-                PeriodicWorkRequestBuilder<CleanupWorker>(7, TimeUnit.DAYS).build(),
+                ExistingPeriodicWorkPolicy.UPDATE,
+                request,
             )
         }
     }
@@ -328,6 +351,9 @@ class TeeVRepository(private val context: Context) {
 
     companion object {
         const val WEEKLY_CLEANUP_WORK = "weekly-cache-cleanup"
+        const val INCLUDE_SWEEP = "include_sweep"
         private const val MAX_SCAN_NODES = 5000
+        private const val KEY_FREQUENCY = "cleanup_frequency"
+        private const val KEY_INCLUDE_SWEEP = "cleanup_include_sweep"
     }
 }
