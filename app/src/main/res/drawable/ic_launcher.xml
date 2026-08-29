@@ -1,15 +1,48 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
-    android:viewportWidth="48"
-    android:viewportHeight="48">
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rounded ink tile -->
     <path
         android:fillColor="#101311"
-        android:pathData="M2,10c0,-2.2 1.8,-4 4,-4h40c2.2,0 4,1.8 4,4v28c0,2.2 -1.8,4 -4,4h-40c-2.2,0 -4,-1.8 -4,-4z" />
+        android:pathData="M20,4 H88 A16,16 0 0 1 104,20 V88 A16,16 0 0 1 88,104 H20 A16,16 0 0 1 4,88 V20 A16,16 0 0 1 20,4 Z" />
+
+    <!-- Soft lime glow -->
     <path
-        android:pathData="M18,24l6,6l12,-12"
+        android:fillColor="#B7F35B"
+        android:fillAlpha="0.10"
+        android:pathData="M82,10m-46,0a46,46 0 1,0 92,0a46,46 0 1,0 -92,0z" />
+
+    <!-- TV frame -->
+    <path
+        android:fillColor="#1E2A1B"
+        android:pathData="M34,28 H74 A10,10 0 0 1 84,38 V60 A10,10 0 0 1 74,70 H34 A10,10 0 0 1 24,60 V38 A10,10 0 0 1 34,28 Z" />
+
+    <!-- Screen -->
+    <path
+        android:fillColor="#0E1510"
+        android:pathData="M35,33 H73 A6,6 0 0 1 79,39 V59 A6,6 0 0 1 73,65 H35 A6,6 0 0 1 29,59 V39 A6,6 0 0 1 35,33 Z" />
+
+    <!-- Clean-sweep checkmark -->
+    <path
+        android:pathData="M36,51 L46,61 L66,40"
         android:strokeColor="#B7F35B"
-        android:strokeWidth="6"
+        android:strokeWidth="8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
+
+    <!-- Sparkle -->
+    <path
+        android:fillColor="#B7F35B"
+        android:pathData="M73,39.5 L74.4,42.6 L77.5,44 L74.4,45.4 L73,48.5 L71.6,45.4 L68.5,44 L71.6,42.6 Z" />
+
+    <!-- Stand -->
+    <path
+        android:fillColor="#1E2A1B"
+        android:pathData="M49,70 H59 L60,76 H48 Z" />
+    <path
+        android:fillColor="#1E2A1B"
+        android:pathData="M39.5,76 H68.5 A2.5,2.5 0 0 1 71,78.5 A2.5,2.5 0 0 1 68.5,81 H39.5 A2.5,2.5 0 0 1 37,78.5 A2.5,2.5 0 0 1 39.5,76 Z" />
 </vector>

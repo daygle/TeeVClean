@@ -18,7 +18,7 @@
         android:theme="@style/Theme.TeeVClean"
         android:label="TeeVClean"
         android:banner="@drawable/teevclean_banner"
-        android:icon="@drawable/teevclean_launcher">
+        android:icon="@drawable/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true">
