@@ -21,6 +21,10 @@ android {
     }
 
     buildFeatures { compose = true }
+
+    lint {
+        disable.add("IconMissingDensityFolder")
+    }
 }
 
 dependencies {
