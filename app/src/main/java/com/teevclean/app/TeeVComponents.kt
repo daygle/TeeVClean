@@ -300,9 +300,11 @@ fun SettingsScreen(
     customFolders: List<String>,
     history: CleanupHistory,
     hasUsageAccess: Boolean,
+    hasStorageAccess: Boolean,
     appVersion: String,
     onEditSchedule: () -> Unit,
     onEnableUsage: () -> Unit,
+    onEnableStorage: () -> Unit,
     onRemoveFolder: (String) -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -342,32 +344,38 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.settings_usage_access_desc), color = Muted, fontSize = 13.sp)
-            }
-        }
-        item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
-                Text(stringResource(R.string.settings_history), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                val lastRun = if (history.lastRun == 0L) {
-                    stringResource(R.string.history_never)
-                } else {
-                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_storage_access), color = Color.White, fontSize = 15.sp)
+                        Text(
+                            if (hasStorageAccess) stringResource(R.string.settings_storage_access_granted)
+                            else stringResource(R.string.settings_storage_access_denied),
+                            color = if (hasStorageAccess) Lime else Color(0xFFFFB74D),
+                            fontSize = 13.sp
+                        )
+                    }
+                    TvButton(onClick = onEnableStorage) {
+                        Text(stringResource(R.string.action_open))
+                    }
                 }
-                Text(stringResource(R.string.history_last_run, lastRun), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(4.dp))
-                Text(pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.settings_storage_access_desc), color = Muted, fontSize = 13.sp)
             }
         }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
                 Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.settings_scanned_folders_desc), color = Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(12.dp))
                 if (customFolders.isEmpty()) {
                     Text(stringResource(R.string.settings_no_folders), color = Muted)
                 } else {
                     customFolders.forEach { folder ->
+                        val displayName = folder.substringAfterLast('/').substringBefore('?').ifEmpty { folder }
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(folder, color = Muted, modifier = Modifier.weight(1f), maxLines = 1)
+                            Text("📁 $displayName", color = Muted, modifier = Modifier.weight(1f), maxLines = 1)
                             IconButton(onClick = { onRemoveFolder(folder) }) {
                                 Icon(Icons.Outlined.Delete, stringResource(R.string.remove_folder), tint = Color.Red)
                             }
@@ -399,7 +407,13 @@ fun LoadingOverlay() {
 }
 
 @Composable
-fun PermissionRationale(title: String, description: String, onClick: () -> Unit) {
+fun PermissionRationale(
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+    fallbackLabel: String? = null,
+    onFallback: (() -> Unit)? = null
+) {
     Column(
         Modifier.fillMaxSize().padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -410,6 +424,10 @@ fun PermissionRationale(title: String, description: String, onClick: () -> Unit)
         Text(description, color = Muted, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(24.dp))
         TvButton(onClick = onClick) { Text(stringResource(R.string.enable)) }
+        if (fallbackLabel != null && onFallback != null) {
+            Spacer(Modifier.height(12.dp))
+            TvTextButton(onClick = onFallback) { Text(fallbackLabel) }
+        }
     }
 }
 

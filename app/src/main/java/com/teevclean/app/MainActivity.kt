@@ -9,6 +9,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.app.AppOpsManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import android.os.SystemClock
@@ -42,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -94,6 +96,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
     var showSweep by remember { mutableStateOf(false) }
     var cleanupResult by remember { mutableStateOf<CleanupResult?>(null) }
     val context = LocalContext.current
+    var lastBackPress by remember { mutableLongStateOf(0L) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
@@ -105,6 +108,20 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    BackHandler {
+        if (viewModel.currentScreen != Screen.OVERVIEW) {
+            viewModel.currentScreen = Screen.OVERVIEW
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackPress < 2000) {
+                (context as? android.app.Activity)?.finish()
+            } else {
+                lastBackPress = now
+                android.widget.Toast.makeText(context, R.string.back_to_exit, android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -151,7 +168,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                     Spacer(Modifier.width(38.dp))
                     Box(Modifier.weight(1f)) {
                         when (viewModel.currentScreen) {
-                            Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, { showCleanup = true }) { viewModel.currentScreen = it }
+                            Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, viewModel.cleanupHistory, { showCleanup = true }) { viewModel.currentScreen = it }
                             Screen.CLEAN -> CleanupScreen(
                                 cacheSize = viewModel.cacheSize,
                                 onReview = { showCleanup = true },
@@ -167,7 +184,9 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                     PermissionRationale(
                                         stringResource(R.string.large_files),
                                         stringResource(R.string.storage_access_rationale),
-                                        onPickFolder
+                                        onPickFolder,
+                                        fallbackLabel = stringResource(R.string.settings),
+                                        onFallback = { viewModel.currentScreen = Screen.SETTINGS }
                                     )
                                 } else {
                                     LargeFilesScreen(
@@ -209,6 +228,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 customFolders = viewModel.customFolders,
                                 history = viewModel.cleanupHistory,
                                 hasUsageAccess = hasUsageStatsPermission(context),
+                                hasStorageAccess = hasStorageAccessPermission(context),
                                 appVersion = "1.0",
                                 onEditSchedule = { showSchedule = true },
                                 onEnableUsage = {
@@ -218,6 +238,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                         Toast.makeText(context, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
                                     }
                                 },
+                                onEnableStorage = onPickFolder,
                                 onRemoveFolder = { viewModel.removeCustomFolder(it) },
                             )
                         }
@@ -229,7 +250,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
 }
 
 @Composable
-private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, onClean: () -> Unit, onNavigate: (Screen) -> Unit) {
+private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, history: CleanupHistory, onClean: () -> Unit, onNavigate: (Screen) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item {
             Text(stringResource(R.string.greeting), color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
@@ -286,6 +307,21 @@ Screen.HEALTH.icon
                     Text(stringResource(R.string.privacy_title), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(stringResource(R.string.privacy_desc), color = Color(0xFFC4D1C2), fontSize = 13.sp)
                 }
+            }
+        }
+        item {
+            Text(stringResource(R.string.cleanup_history_label), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                val lastRun = if (history.lastRun == 0L) {
+                    stringResource(R.string.history_never)
+                } else {
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
+                }
+                Text(stringResource(R.string.history_last_run, lastRun), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems), color = Muted, fontSize = 14.sp)
             }
         }
     }
@@ -348,11 +384,6 @@ private fun CleanupScreen(
         }
         item {
             TvTextButton(onClick = onSchedule) { Text(scheduleButtonLabel) }
-        }
-        item {
-            TvTextButton(onClick = { onNavigate(Screen.OVERVIEW) }) {
-                Text(stringResource(R.string.overview))
-            }
         }
     }
 }
@@ -616,13 +647,16 @@ private fun BreakdownRow(label: String, value: String, swatch: Color, indent: Bo
 private fun HealthScreen(context: Context, storage: StorageSummary) {
     val manager = context.getSystemService(ConnectivityManager::class.java)
     val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.device_health), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.device_health_desc), color = Muted, fontSize = 16.sp)
+        Spacer(Modifier.height(8.dp))
         ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f)
         ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network)
         ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true)
-        ResultRow(stringResource(R.string.android_version), "${Build.MANUFACTURER} ${Build.MODEL}", "Android ${Build.VERSION.RELEASE}", true)
+        ResultRow(stringResource(R.string.device_model), "${Build.MANUFACTURER}", Build.MODEL, true)
+        ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), "Android ${Build.VERSION.RELEASE}", true)
+        Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp)
     }
 }
@@ -662,7 +696,7 @@ private fun ScheduleDialog(
     var sweep by remember { mutableStateOf(sweepEnabled) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.schedule_title)) },
+        title = { Text(stringResource(R.string.schedule_title), color = Muted) },
         text = {
             Column {
                 Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 14.sp)
@@ -678,10 +712,10 @@ private fun ScheduleDialog(
                 Spacer(Modifier.height(18.dp))
                 Text(stringResource(R.string.schedule_items_label), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.schedule_cache_always), color = Muted, fontSize = 13.sp)
+                Text(stringResource(R.string.schedule_clean_own_cache), color = Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
                 SelectableChip(
-                    stringResource(R.string.schedule_include_sweep),
+                    stringResource(R.string.schedule_clean_sweep),
                     selected = sweep && hasFolders,
                     enabled = hasFolders,
                 ) { sweep = !sweep }
@@ -742,6 +776,10 @@ private fun hasUsageStatsPermission(context: Context): Boolean {
         context.packageName
     )
     return mode == AppOpsManager.MODE_ALLOWED
+}
+
+private fun hasStorageAccessPermission(context: Context): Boolean {
+    return context.contentResolver.persistedUriPermissions.isNotEmpty()
 }
 
 @Composable

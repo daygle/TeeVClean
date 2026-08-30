@@ -24,7 +24,7 @@
     <string name="storage_health_label">Storage Health</string>
     <string name="used_of_total">%1$s of %2$s used</string>
     <string name="available_space_label">available space</string>
-    <string name="review_cleanup">Review Cleanup</string>
+    <string name="review_cleanup">Review Clean-up</string>
 
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">This App\'s Cache</string>
@@ -33,7 +33,7 @@
     <string name="other_app_caches_desc">Android requires each app\'s own info page.</string>
     <string name="downloads_and_media">Downloads and Media</string>
     <string name="downloads_and_media_desc">Select files in the large-file review.</string>
-    <string name="review_cleanup_plan">Review Cleanup Plan</string>
+
 
     <string name="large_files_desc">Review files in shared storage. Unknown files are never deleted automatically.</string>
     <string name="filter_over_500mb">Over 500 MB</string>
@@ -60,13 +60,22 @@
     <string name="system_uptime">System Uptime</string>
     <string name="system_uptime_desc">Time since the device last booted.</string>
     <string name="android_version">Android Version</string>
+    <string name="android_version_desc">Operating system version</string>
+    <string name="device_model">Device</string>
+    <string name="back_to_exit">Press back again to exit</string>
     <string name="thermal_disclaimer">Thermal readings vary by TV manufacturer and are not exposed on every device.</string>
 
     <string name="enable">Enable</string>
     <string name="cancel">Cancel</string>
 
-    <string name="confirm_cleanup">Confirm Cleanup</string>
+    <string name="confirm_cleanup">Confirm Clean-up</string>
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
+    <string name="review_cleanup_plan">Review Clean-up Plan</string>
+    <string name="schedule_clean_own_cache">TeeVClean cache</string>
+    <string name="schedule_clean_sweep">Temp &amp; log files in custom folders</string>
+    <string name="schedule_clean_large_files">Large files (500 MB+)</string>
+    <string name="schedule_clean_old_files">Files older than 30 days</string>
+    <string name="schedule_clean_installers">Installer APKs</string>
     <string name="remove_cache">Remove Cache</string>
 
     <string name="last_used_unavailable">Last used unavailable</string>
@@ -74,15 +83,20 @@
     <string name="version_footer">TV Cleaner  .  v%1$s</string>
 
     <string name="scanning">Scanning…</string>
-    <string name="storage_access_rationale">To scan for large files, please add a folder for the app to analyze.</string>
+    <string name="storage_access_rationale">To scan for large files, please grant folder access in Application Permission, or choose a folder below.</string>
 
-    <string name="settings_cleanup_schedule">Weekly Cleanup Schedule</string>
-    <string name="settings_permissions">App Permissions</string>
+    <string name="settings_cleanup_schedule">Weekly Clean-up Schedule</string>
+    <string name="settings_permissions">Application Permission</string>
     <string name="settings_usage_access">Usage Access</string>
     <string name="settings_usage_access_granted">Granted</string>
     <string name="settings_usage_access_denied">Not granted</string>
     <string name="settings_usage_access_desc">Required to show when apps were last used and for the detailed storage breakdown.</string>
-    <string name="settings_scanned_folders">Scanned Folders</string>
+    <string name="settings_storage_access">Folder Access</string>
+    <string name="settings_storage_access_desc">Required to scan custom folders for large and duplicate files.</string>
+    <string name="settings_storage_access_granted">Granted</string>
+    <string name="settings_storage_access_denied">Not granted</string>
+    <string name="settings_scanned_folders">Custom Folders</string>
+    <string name="settings_scanned_folders_desc">Folders added for large file and duplicate scanning. Add new folders from the Large Files screen.</string>
     <string name="settings_no_folders">No custom folders added yet.</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_about">About TeeVClean</string>
@@ -95,7 +109,7 @@
     <string name="free_up_space">Open Android “Free up space”</string>
     <string name="delete">Delete</string>
     <string name="confirm_sweep_desc">Remove leftover temp, log and thumbnail files, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
-    <string name="schedule_title">Automatic Cleanup</string>
+    <string name="schedule_title">Automatic Clean-up</string>
     <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included - never your files or other apps\' caches.</string>
     <string name="schedule_frequency_label">How often</string>
     <string name="freq_off">Off</string>
@@ -105,17 +119,18 @@
     <string name="schedule_items_label">What to clean</string>
     <string name="schedule_cache_always">TeeVClean cache - always included</string>
     <string name="schedule_include_sweep">Temp &amp; log files in my folders</string>
-    <string name="schedule_sweep_needs_folder">Add a folder in Large Files to enable this.</string>
-    <string name="schedule_cta">Schedule Cleanup</string>
+    <string name="schedule_sweep_needs_folder">Add a custom folder in Settings to enable this.</string>
+    <string name="schedule_cta">Schedule Clean-up</string>
     <string name="schedule_status">Scheduled: %1$s</string>
     <string name="schedule_with_sweep">%1$s · incl. temp sweep</string>
     <string name="schedule_change">Change</string>
     <string name="save">Save</string>
 
-    <string name="cleanup_complete">Cleanup Complete</string>
+    <string name="cleanup_complete">Clean-up Complete</string>
     <string name="cleanup_nothing">Everything was already clean - nothing to remove.</string>
     <string name="done">Done</string>
     <string name="feature_not_supported">This feature is not supported on your device (system component missing).</string>
+    <string name="feature_not_supported_folder">Folder selection is not available on this device. Please add folders from the Settings screen.</string>
     <plurals name="cleanup_freed">
         <item quantity="one">Freed %1$s across %2$d item.</item>
         <item quantity="other">Freed %1$s across %2$d items.</item>
@@ -157,7 +172,6 @@
     <string name="breakdown_free">Free</string>
     <string name="breakdown_needs_usage">Grant Usage Access (Applications) to attribute space to individual apps.</string>
 
-    <string name="settings_history">Cleanup History</string>
     <string name="history_never">never</string>
     <string name="history_last_run">Last run: %1$s</string>
     <plurals name="history_total_freed">
@@ -167,6 +181,7 @@
     <string name="remove_folder">Remove folder</string>
     <string name="about_version">TeeVClean version %1$s</string>
 
+    <string name="cleanup_history_label">Cleanup History</string>
     <string name="confirm_delete_dupes">Delete duplicate copies?</string>
     <plurals name="confirm_delete_dupes_desc">
         <item quantity="one">%1$d copy will be removed, keeping 1. Frees %2$s.</item>
