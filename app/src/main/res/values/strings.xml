@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">TeeVClean</string>
     <string name="overview">Overview</string>
-    <string name="cleanup">Cleanup</string>
+    <string name="cleanup">Clean-up</string>
     <string name="large_files">Large Files</string>
     <string name="apps">Applications</string>
     <string name="device_health">Device Health</string>
@@ -9,7 +9,7 @@
 
     <string name="greeting">Good evening, ready to tidy up?</string>
     <string name="sub_greeting">A calmer, cleaner TV starts here.</string>
-    <string name="safe_tools_title">Safe tools for a healthier TV</string>
+    <string name="safe_tools_title">Maintenance &amp; Analysis</string>
 
     <string name="feature_large_files_desc">Review downloads and media before deleting</string>
     <plurals name="feature_app_review_desc">

@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material3.Icon
@@ -128,7 +129,28 @@ fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
 
 @Composable
 fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 14.sp) }; Text(amount, color = if (safe) Lime else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (isFocused) PanelLight else Panel)
+            .border(
+                if (isFocused) 2.dp else 0.dp,
+                if (isFocused) Lime else Color.Transparent,
+                RoundedCornerShape(18.dp),
+            )
+            .focusable(interactionSource = interactionSource)
+            .padding(22.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 14.sp)
+        }
+        Text(amount, color = if (safe) Lime else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 @Composable
@@ -279,7 +301,7 @@ fun FeatureCard(
 }
 
 @Composable
-fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
+fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(27.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(stringResource(R.string.storage_health_label), color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.used_of_total, formatBytes(storage.used), formatBytes(storage.total)), color = Muted, fontSize = 15.sp) }
@@ -291,6 +313,21 @@ fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
             }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
+        
+        Spacer(Modifier.height(20.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val lastRun = if (history.lastRun == 0L) {
+                stringResource(R.string.history_never)
+            } else {
+                java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
+            }
+            Text(
+                text = stringResource(R.string.history_last_run, lastRun) + "  •  " + 
+                    pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems),
+                color = Muted,
+                fontSize = 13.sp
+            )
+        }
     }
 }
 
@@ -365,28 +402,90 @@ fun SettingsScreen(
         }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
-                Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.settings_scanned_folders_desc), color = Muted, fontSize = 13.sp)
-                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.settings_scanned_folders_desc), color = Muted, fontSize = 13.sp)
+                    }
+                    TvButton(onClick = onEnableStorage) {
+                        Text(stringResource(R.string.action_scan))
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
                 if (customFolders.isEmpty()) {
-                    Text(stringResource(R.string.settings_no_folders), color = Muted)
+                    Text(stringResource(R.string.settings_no_folders), color = Muted, modifier = Modifier.padding(vertical = 8.dp))
                 } else {
                     customFolders.forEach { folder ->
                         val displayName = folder.substringAfterLast('/').substringBefore('?').ifEmpty { folder }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text("📁 $displayName", color = Muted, modifier = Modifier.weight(1f), maxLines = 1)
-                            IconButton(onClick = { onRemoveFolder(folder) }) {
-                                Icon(Icons.Outlined.Delete, stringResource(R.string.remove_folder), tint = Color.Red)
-                            }
+                        val interactionSource = remember { MutableInteractionSource() }
+                        val isFocused by interactionSource.collectIsFocusedAsState()
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically, 
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isFocused) PanelLight else Color.Transparent)
+                                .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(12.dp))
+                                .onKeyEvent {
+                                    if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                                        onRemoveFolder(folder)
+                                        true
+                                    } else false
+                                }
+                                .clickable(interactionSource = interactionSource, indication = null) {
+                                    onRemoveFolder(folder)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("📁 $displayName", color = if (isFocused) Color.White else Muted, modifier = Modifier.weight(1f), maxLines = 1)
+                            Text(stringResource(R.string.remove_folder), color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                     }
                 }
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+            val interactionSource = remember { MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Panel)
+                    .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(18.dp))
+                    .focusable(interactionSource = interactionSource)
+                    .padding(20.dp)
+            ) {
+                Text(stringResource(R.string.cleanup_history_label), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                val lastRun = if (history.lastRun == 0L) {
+                    stringResource(R.string.history_never)
+                } else {
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
+                }
+                Text(stringResource(R.string.history_last_run, lastRun), color = Color.White, fontSize = 15.sp)
+                Text(
+                    pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems),
+                    color = Muted,
+                    fontSize = 13.sp
+                )
+            }
+        }
+        item {
+            val interactionSource = remember { MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Panel)
+                    .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(18.dp))
+                    .focusable(interactionSource = interactionSource)
+                    .padding(20.dp)
+            ) {
                 Text(stringResource(R.string.settings_about), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.about_version, appVersion), color = Muted, fontSize = 14.sp)

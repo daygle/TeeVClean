@@ -254,4 +254,6 @@ class TeeVViewModel(
     fun openAppInfo(packageName: String) {
         repository.openAppInfo(packageName)
     }
+
+    fun hasFullStorageAccess(): Boolean = repository.hasFullStorageAccess()
 }

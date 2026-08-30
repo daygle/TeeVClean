@@ -123,6 +123,17 @@ class TeeVRepository(private val context: Context) {
         prefs.edit { putStringSet("custom_folders", folders) }
     }
 
+    fun hasFullStorageAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     suspend fun readStorage(): StorageSummary = withContext(Dispatchers.IO) {
         val stat = StatFs(Environment.getDataDirectory().path)
         val total = stat.blockCountLong * stat.blockSizeLong
@@ -210,12 +221,17 @@ class TeeVRepository(private val context: Context) {
         val largeFileBytes = 500L * 1024 * 1024
 
         // Public storage roots read directly (works where the app has legacy/all-files access).
-        val publicRoots = listOf(
+        val publicRoots = mutableListOf(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
         )
-        val publicMatches = publicRoots.flatMap { root ->
+        // If the user granted full storage access (legacy or MANAGE_EXTERNAL_STORAGE), scan everything.
+        if (hasFullStorageAccess()) {
+            publicRoots.add(Environment.getExternalStorageDirectory())
+        }
+
+        val publicMatches = publicRoots.distinct().flatMap { root ->
             if (root.exists() && root.isDirectory) {
                 root.listFiles()
                     ?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff || isInstaller(it.name)) }
