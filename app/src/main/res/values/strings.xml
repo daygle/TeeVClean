@@ -125,4 +125,38 @@
         <item quantity="one">Freed %1$s across %2$d item.</item>
         <item quantity="other">Freed %1$s across %2$d items.</item>
     </plurals>
+
+    <string name="filter_installers">Installers</string>
+    <string name="select_all">Select all</string>
+    <string name="clear_selection">Clear</string>
+    <string name="delete_selected">Delete selected (%1$d)</string>
+    <string name="confirm_delete_files">Delete selected files?</string>
+    <plurals name="confirm_delete_files_desc">
+        <item quantity="one">%1$d file (%2$s) will be permanently deleted. This cannot be undone.</item>
+        <item quantity="other">%1$d files (%2$s) will be permanently deleted. This cannot be undone.</item>
+    </plurals>
+
+    <string name="rarely_used_title">Rarely used (90+ days)</string>
+    <string name="rarely_used_desc">Apps you haven\'t opened in over 3 months. Uninstall to reclaim space.</string>
+    <string name="all_apps_title">All apps by size</string>
+    <string name="uninstall">Uninstall</string>
+
+    <string name="duplicates">Duplicates</string>
+    <string name="duplicates_desc">Files that look identical in the folders you added. The newest copy is kept.</string>
+    <string name="action_scan">Scan</string>
+    <string name="no_duplicates">No duplicate files found in your added folders.</string>
+    <string name="rescan">Rescan</string>
+    <plurals name="duplicate_group">
+        <item quantity="one">%1$d copy · %2$s each</item>
+        <item quantity="other">%1$d copies · %2$s each</item>
+    </plurals>
+    <plurals name="delete_extras">
+        <item quantity="one">Delete %1$d extra copy</item>
+        <item quantity="other">Delete %1$d extra copies</item>
+    </plurals>
+    <string name="confirm_delete_dupes">Delete duplicate copies?</string>
+    <plurals name="confirm_delete_dupes_desc">
+        <item quantity="one">%1$d copy will be removed, keeping 1. Frees %2$s.</item>
+        <item quantity="other">%1$d copies will be removed, keeping 1. Frees %2$s.</item>
+    </plurals>
 </resources>

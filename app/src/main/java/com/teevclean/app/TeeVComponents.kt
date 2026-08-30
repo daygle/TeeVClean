@@ -63,7 +63,7 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
             Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(62.dp))
-        Screen.entries.filter { it != Screen.SETTINGS }.forEach { screen -> NavItem(screen, selected, onSelect) }
+        Screen.entries.filter { it != Screen.SETTINGS && it != Screen.DUPLICATES }.forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect)
         Text(stringResource(R.string.version_footer, "1.0"), color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
@@ -193,6 +193,45 @@ fun SelectableChip(label: String, selected: Boolean, enabled: Boolean = true, on
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+@Composable
+fun SelectableFileRow(title: String, subtitle: String, amount: String, selected: Boolean, onToggle: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (isFocused) PanelLight else Panel)
+            .border(
+                if (isFocused || selected) 2.dp else 0.dp,
+                if (selected) Lime else if (isFocused) Color.White else Color.Transparent,
+                RoundedCornerShape(18.dp),
+            )
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
+                    onToggle()
+                    true
+                } else false
+            }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onToggle)
+            .padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(if (selected) Lime else PanelLight),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Text("✓", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(subtitle, color = Muted, fontSize = 13.sp, maxLines = 1)
+        }
+        Text(amount, color = Lime, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
 

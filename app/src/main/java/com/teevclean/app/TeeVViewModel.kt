@@ -77,6 +77,14 @@ enum class Screen(val labelRes: Int, val icon: ImageVector) {
                 "-8.55,11.54L12,21.35z",
         ),
     ),
+    DUPLICATES(
+        R.string.duplicates,
+        menuIcon(
+            "duplicates",
+            "M16,1H4c-1.1,0,-2,0.9,-2,2v14h2V3h12V1zm3,4H8c-1.1,0,-2,0.9,-2,2v14c0,1.1,0.9,2,2,2h11c1.1," +
+                "0,2,-0.9,2,-2V7c0,-1.1,-0.9,-2,-2,-2zm0,16H8V7h11v14z",
+        ),
+    ),
     SETTINGS(
         R.string.settings,
         menuIcon(
@@ -111,6 +119,8 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
     var cacheSize by mutableLongStateOf(0L)
     var isRefreshing by mutableStateOf(false)
     var lastCleanupResult by mutableStateOf<CleanupResult?>(null)
+    var duplicateGroups by mutableStateOf(emptyList<DuplicateGroup>())
+    var isScanningDuplicates by mutableStateOf(false)
 
     init {
         refreshData()
@@ -159,6 +169,37 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
             refreshData()
             onComplete()
         }
+    }
+
+    fun deleteFiles(files: List<FileSummary>, onComplete: (CleanupResult) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.deleteFiles(files)
+            lastCleanupResult = result
+            refreshData()
+            onComplete(result)
+        }
+    }
+
+    fun findDuplicates() {
+        viewModelScope.launch {
+            isScanningDuplicates = true
+            duplicateGroups = repository.scanDuplicates()
+            isScanningDuplicates = false
+        }
+    }
+
+    fun deleteDuplicates(files: List<FileSummary>, onComplete: (CleanupResult) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.deleteFiles(files)
+            lastCleanupResult = result
+            duplicateGroups = repository.scanDuplicates()
+            refreshData()
+            onComplete(result)
+        }
+    }
+
+    fun uninstallApp(packageName: String) {
+        repository.uninstallApp(packageName)
     }
 
     fun sweepJunk(onComplete: (CleanupResult) -> Unit) {

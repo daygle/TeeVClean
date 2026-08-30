@@ -37,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,6 +130,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 onSchedule = { showSchedule = true },
                                 onSweep = { showSweep = true },
                                 onFreeUpSpace = { viewModel.openStorageManager() },
+                                onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
                                 scheduleButtonLabel = scheduleButtonLabel(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
                                 onNavigate = { viewModel.currentScreen = it },
                             )
@@ -140,9 +142,11 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                         onPickFolder
                                     )
                                 } else {
-                                    LargeFilesScreen(viewModel.largeFiles, onPickFolder) { uri ->
-                                        viewModel.deleteLargeFile(uri)
-                                    }
+                                    LargeFilesScreen(
+                                        files = viewModel.largeFiles,
+                                        onPickFolder = onPickFolder,
+                                        onDeleteMany = { selected -> viewModel.deleteFiles(selected) { result -> cleanupResult = result } },
+                                    )
                                 }
                             }
                             Screen.APPS -> AppReviewScreen(
@@ -150,6 +154,14 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 hasUsageAccess = hasUsageStatsPermission(context),
                                 onEnableUsage = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
                                 onOpenInfo = { viewModel.openAppInfo(it) },
+                                onUninstall = { viewModel.uninstallApp(it) },
+                            )
+                            Screen.DUPLICATES -> DuplicatesScreen(
+                                groups = viewModel.duplicateGroups,
+                                isScanning = viewModel.isScanningDuplicates,
+                                onScan = { viewModel.findDuplicates() },
+                                onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
+                                onBack = { viewModel.currentScreen = Screen.CLEAN },
                             )
                             Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
                             Screen.SETTINGS -> SettingsScreen(
@@ -227,6 +239,7 @@ private fun CleanupScreen(
     onSchedule: () -> Unit,
     onSweep: () -> Unit,
     onFreeUpSpace: () -> Unit,
+    onFindDuplicates: () -> Unit,
     scheduleButtonLabel: String,
     onNavigate: (Screen) -> Unit,
 ) {
@@ -260,6 +273,14 @@ private fun CleanupScreen(
             )
         }
         item {
+            ActionRow(
+                stringResource(R.string.duplicates),
+                stringResource(R.string.duplicates_desc),
+                stringResource(R.string.action_scan),
+                onClick = onFindDuplicates,
+            )
+        }
+        item {
             Spacer(Modifier.height(2.dp))
             TvButton(onClick = onReview) { Text(stringResource(R.string.review_cleanup_plan)) }
         }
@@ -278,48 +299,60 @@ private fun CleanupScreen(
 }
 
 @Composable
-private fun LargeFilesScreen(files: List<FileSummary>, onPickFolder: () -> Unit, onDelete: (String) -> Unit) {
-    var pendingDelete by remember { mutableStateOf<FileSummary?>(null) }
+private fun LargeFilesScreen(
+    files: List<FileSummary>,
+    onPickFolder: () -> Unit,
+    onDeleteMany: (List<FileSummary>) -> Unit,
+) {
+    val shown = files.take(50)
+    var selected by remember { mutableStateOf(setOf<String>()) }
+    var showConfirm by remember { mutableStateOf(false) }
+    // Drop selections whose files are no longer present (e.g. after a delete + rescan).
+    val selectedFiles = shown.filter { it.uri in selected }
+    val selectedBytes = selectedFiles.sumOf { it.size }
 
-    pendingDelete?.let { file ->
+    if (showConfirm && selectedFiles.isNotEmpty()) {
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(R.string.confirm_delete_file)) },
-            text = { Text(stringResource(R.string.confirm_delete_file_desc, file.name, formatBytes(file.size))) },
+            onDismissRequest = { showConfirm = false },
+            title = { Text(stringResource(R.string.confirm_delete_files)) },
+            text = { Text(pluralStringResource(R.plurals.confirm_delete_files_desc, selectedFiles.size, selectedFiles.size, formatBytes(selectedBytes))) },
             confirmButton = {
                 TvButton(onClick = {
-                    onDelete(file.uri)
-                    pendingDelete = null
+                    onDeleteMany(selectedFiles)
+                    selected = emptySet()
+                    showConfirm = false
                 }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TvTextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TvTextButton(onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(stringResource(R.string.filter_over_500mb), stringResource(R.string.filter_older_30days), stringResource(R.string.filter_downloads)).forEach {
+            listOf(stringResource(R.string.filter_over_500mb), stringResource(R.string.filter_older_30days), stringResource(R.string.filter_installers)).forEach {
                 Text(it, color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Lime).padding(horizontal = 18.dp, vertical = 10.dp))
             }
         }
         if (files.isEmpty()) {
             Text(stringResource(R.string.no_large_files), color = Muted, fontSize = 15.sp)
         } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TvTextButton(onClick = {
+                    selected = if (selected.size == shown.size) emptySet() else shown.map { it.uri }.toSet()
+                }) { Text(if (selected.size == shown.size) stringResource(R.string.clear_selection) else stringResource(R.string.select_all)) }
+                Spacer(Modifier.weight(1f))
+                if (selectedFiles.isNotEmpty()) {
+                    TvButton(onClick = { showConfirm = true }) {
+                        Text(stringResource(R.string.delete_selected, selectedFiles.size))
+                    }
+                }
+            }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                items(files.take(20)) { file ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(file.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                            Text(file.path, color = Muted, fontSize = 14.sp, maxLines = 1)
-                        }
-                        Text(formatBytes(file.size), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(16.dp))
-                        TvTextButton(onClick = { pendingDelete = file }) { Text(stringResource(R.string.delete)) }
+                items(shown) { file ->
+                    SelectableFileRow(file.name, file.path, formatBytes(file.size), file.uri in selected) {
+                        selected = if (file.uri in selected) selected - file.uri else selected + file.uri
                     }
                 }
             }
@@ -335,7 +368,11 @@ private fun AppReviewScreen(
     hasUsageAccess: Boolean,
     onEnableUsage: () -> Unit,
     onOpenInfo: (String) -> Unit,
+    onUninstall: (String) -> Unit,
 ) {
+    val rarelyUsedCutoff = System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000
+    val rarelyUsed = apps.filter { it.lastUsed in 1L until rarelyUsedCutoff }
+
     Column(Modifier.fillMaxSize()) {
         Text(stringResource(R.string.app_review), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -351,7 +388,30 @@ private fun AppReviewScreen(
                 onClick = onEnableUsage,
             )
         }
+        if (rarelyUsed.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            Text(stringResource(R.string.rarely_used_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text(stringResource(R.string.rarely_used_desc), color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
+            rarelyUsed.take(6).forEach { app ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF2A211C)).padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(app.label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(lastUsedText(app.lastUsed), color = Color(0xFFFFB74D), fontSize = 12.sp)
+                    }
+                    Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(16.dp))
+                    TvButton(onClick = { onUninstall(app.packageName) }) { Text(stringResource(R.string.uninstall)) }
+                }
+            }
+        }
         Spacer(Modifier.height(20.dp))
+        Text(stringResource(R.string.all_apps_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(apps.take(15)) { app ->
                 Row(
@@ -367,6 +427,70 @@ private fun AppReviewScreen(
                     TvTextButton(onClick = { onOpenInfo(app.packageName) }) { Text(stringResource(R.string.app_info_btn)) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DuplicatesScreen(
+    groups: List<DuplicateGroup>,
+    isScanning: Boolean,
+    onScan: () -> Unit,
+    onDeleteExtras: (List<FileSummary>) -> Unit,
+    onBack: () -> Unit,
+) {
+    var pending by remember { mutableStateOf<DuplicateGroup?>(null) }
+    LaunchedEffect(Unit) { if (groups.isEmpty() && !isScanning) onScan() }
+
+    pending?.let { group ->
+        val extras = group.files.drop(1)
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text(stringResource(R.string.confirm_delete_dupes)) },
+            text = { Text(pluralStringResource(R.plurals.confirm_delete_dupes_desc, extras.size, extras.size, formatBytes(group.reclaimableBytes))) },
+            confirmButton = {
+                TvButton(onClick = {
+                    onDeleteExtras(extras)
+                    pending = null
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = { TvTextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(stringResource(R.string.duplicates), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.duplicates_desc), color = Muted, fontSize = 16.sp)
+        when {
+            isScanning -> Text(stringResource(R.string.scanning), color = Lime, fontSize = 15.sp)
+            groups.isEmpty() -> Text(stringResource(R.string.no_duplicates), color = Muted, fontSize = 15.sp)
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+                items(groups) { group ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                        Text(
+                            pluralStringResource(R.plurals.duplicate_group, group.files.size, group.files.size, formatBytes(group.sizeEach)),
+                            color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        group.files.forEachIndexed { index, file ->
+                            Text(
+                                (if (index == 0) "★ " else "• ") + file.name + "  —  " + file.path,
+                                color = if (index == 0) Lime else Muted,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        TvButton(onClick = { pending = group }) {
+                            Text(pluralStringResource(R.plurals.delete_extras, group.files.size - 1, group.files.size - 1))
+                        }
+                    }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TvButton(onClick = onScan) { Text(stringResource(R.string.rescan)) }
+            TvTextButton(onClick = onBack) { Text(stringResource(R.string.safe_cleanup)) }
         }
     }
 }

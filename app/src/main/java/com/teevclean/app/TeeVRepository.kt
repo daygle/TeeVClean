@@ -21,6 +21,7 @@ import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.concurrent.TimeUnit
 
@@ -48,6 +49,14 @@ data class FileSummary(
 
 /** Outcome of a cleanup action, so the UI can report what was actually removed. */
 data class CleanupResult(val freedBytes: Long, val itemsRemoved: Int)
+
+/**
+ * A set of files that appear to be identical. [files] is ordered newest-first; keeping the
+ * first and removing the rest reclaims [reclaimableBytes].
+ */
+data class DuplicateGroup(val files: List<FileSummary>, val sizeEach: Long) {
+    val reclaimableBytes: Long get() = sizeEach * (files.size - 1).coerceAtLeast(0)
+}
 
 /** How often the unattended background cleanup runs. [intervalDays] is null when disabled. */
 enum class CleanupFrequency(val intervalDays: Long?) {
@@ -117,7 +126,7 @@ class TeeVRepository(private val context: Context) {
         val publicMatches = publicRoots.flatMap { root ->
             if (root.exists() && root.isDirectory) {
                 root.listFiles()
-                    ?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff) }
+                    ?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff || isInstaller(it.name)) }
                     ?.map { FileSummary(it.name, it.parent.orEmpty(), it.length(), it.lastModified(), Uri.fromFile(it).toString()) }
                     .orEmpty()
             } else emptyList()
@@ -126,7 +135,7 @@ class TeeVRepository(private val context: Context) {
         // Folders the user granted through the Storage Access Framework; entries here are deletable.
         val safMatches = getCustomFolders().flatMap { uriString ->
             walkSafTree(uriString) { doc ->
-                doc.length() >= largeFileBytes || doc.lastModified() < cutoff
+                doc.length() >= largeFileBytes || doc.lastModified() < cutoff || isInstaller(doc.name)
             }
         }
 
@@ -189,6 +198,60 @@ class TeeVRepository(private val context: Context) {
         }
     }
 
+    /** Deletes several scanned files, reporting how much was freed. Sizes are captured before deletion. */
+    suspend fun deleteFiles(files: List<FileSummary>): CleanupResult = withContext(Dispatchers.IO) {
+        var freed = 0L
+        var removed = 0
+        for (file in files) {
+            if (deleteFile(file.uri)) {
+                freed += file.size
+                removed++
+            }
+        }
+        CleanupResult(freed, removed)
+    }
+
+    /**
+     * Finds groups of files that look identical, within the folders the user granted.
+     * Files are grouped by exact size and then by a content fingerprint (SHA-256 of the
+     * first [FINGERPRINT_BYTES]), which is fast and a strong signal for real-world media
+     * and documents. Deletion is always user-confirmed, so the fingerprint heuristic is safe.
+     */
+    suspend fun scanDuplicates(): List<DuplicateGroup> = withContext(Dispatchers.IO) {
+        val candidates = getCustomFolders().flatMap { uriString ->
+            walkSafTree(uriString) { doc -> doc.length() >= MIN_DUPLICATE_BYTES }
+        }
+        candidates
+            .groupBy { it.size }
+            .filterValues { it.size > 1 }
+            .flatMap { (size, sameSize) ->
+                sameSize
+                    .groupBy { fileFingerprint(it.uri) }
+                    .filterKeys { it != null }
+                    .values
+                    .filter { it.size > 1 }
+                    .map { group -> DuplicateGroup(group.sortedByDescending { it.modified }, size) }
+            }
+            .sortedByDescending { it.reclaimableBytes }
+    }
+
+    private fun fileFingerprint(uriString: String): String? = try {
+        context.contentResolver.openInputStream(uriString.toUri())?.use { input ->
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(64 * 1024)
+            var total = 0
+            while (total < FINGERPRINT_BYTES) {
+                val read = input.read(buffer, 0, minOf(buffer.size, FINGERPRINT_BYTES - total))
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+                total += read
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     /** Removes obvious junk (temp/log/thumbnail files and empty folders) from granted SAF folders. */
     suspend fun sweepJunk(): CleanupResult = withContext(Dispatchers.IO) {
         var freed = 0L
@@ -234,7 +297,17 @@ class TeeVRepository(private val context: Context) {
     private fun isJunk(name: String?): Boolean {
         val lower = name?.lowercase() ?: return false
         return lower.endsWith(".tmp") || lower.endsWith(".temp") || lower.endsWith(".log") ||
-            lower == ".ds_store" || lower == "thumbs.db" || lower.endsWith(".thumbnails")
+            lower == ".ds_store" || lower == "thumbs.db" || lower.endsWith(".thumbnails") ||
+            // Abandoned partial downloads — safe to remove.
+            lower.endsWith(".part") || lower.endsWith(".partial") ||
+            lower.endsWith(".crdownload") || lower.endsWith(".download")
+    }
+
+    /** Leftover app installers, which are safe to review for removal once the app is installed. */
+    private fun isInstaller(name: String?): Boolean {
+        val lower = name?.lowercase() ?: return false
+        return lower.endsWith(".apk") || lower.endsWith(".xapk") ||
+            lower.endsWith(".apkm") || lower.endsWith(".obb")
     }
 
     /** Opens the system "free up space" storage manager so the user can act device-wide. */
@@ -325,6 +398,17 @@ class TeeVRepository(private val context: Context) {
         context.startActivity(intent)
     }
 
+    /** Launches the system uninstall prompt for a package. The user confirms the removal. */
+    fun uninstallApp(packageName: String) {
+        val intent = Intent(Intent.ACTION_DELETE, "package:$packageName".toUri())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            openAppInfo(packageName)
+        }
+    }
+
     private fun iterativeFolderSize(root: File): Long {
         if (!root.exists()) return 0L
         if (root.isFile) return root.length()
@@ -355,5 +439,11 @@ class TeeVRepository(private val context: Context) {
         private const val MAX_SCAN_NODES = 5000
         private const val KEY_FREQUENCY = "cleanup_frequency"
         private const val KEY_INCLUDE_SWEEP = "cleanup_include_sweep"
+
+        /** Ignore files below this size when hunting duplicates — tiny files aren't worth the churn. */
+        private const val MIN_DUPLICATE_BYTES = 1L * 1024 * 1024
+
+        /** Bytes hashed per file to fingerprint content for duplicate detection. */
+        private const val FINGERPRINT_BYTES = 1 * 1024 * 1024
     }
 }
