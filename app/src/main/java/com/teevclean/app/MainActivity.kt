@@ -247,7 +247,6 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 breakdown = viewModel.storageBreakdown,
                                 isLoading = viewModel.isLoadingBreakdown,
                                 onLoad = { viewModel.loadBreakdown() },
-                                onBack = { viewModel.currentScreen = Screen.OVERVIEW },
                             )
                             Screen.SETTINGS -> SettingsScreen(
                                 scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
@@ -603,7 +602,6 @@ private fun StorageBreakdownScreen(
     breakdown: StorageBreakdown?,
     isLoading: Boolean,
     onLoad: () -> Unit,
-    onBack: () -> Unit,
 ) {
     LaunchedEffect(Unit) { if (breakdown == null && !isLoading) onLoad() }
 
@@ -639,10 +637,7 @@ private fun StorageBreakdownScreen(
                 Text(stringResource(R.string.breakdown_needs_usage), color = Muted, fontSize = 13.sp)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TvButton(onClick = onLoad) { Text(stringResource(R.string.rescan)) }
-            TvTextButton(onClick = onBack) { Text(stringResource(R.string.overview)) }
-        }
+        TvButton(onClick = onLoad) { Text(stringResource(R.string.rescan)) }
     }
 }
 
