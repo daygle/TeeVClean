@@ -2,7 +2,7 @@
     <string name="app_name">TeeVClean</string>
     <string name="overview">Overview</string>
     <string name="cleanup">Clean-up</string>
-    <string name="large_files">Large Files</string>
+    <string name="large_files">Downloads and Media</string>
     <string name="apps">Applications</string>
     <string name="device_health">Device Health</string>
     <string name="settings">Settings</string>
@@ -31,14 +31,12 @@
     <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
     <string name="other_app_caches">Other Application Caches</string>
     <string name="other_app_caches_desc">Android requires each app\'s own info page.</string>
-    <string name="downloads_and_media">Downloads and Media</string>
-    <string name="downloads_and_media_desc">Select files in the large-file review.</string>
 
 
-    <string name="large_files_desc">Review files in shared storage. Unknown files are never deleted automatically.</string>
+    <string name="large_files_desc">Review your downloads and media files. Unknown files are never deleted automatically.</string>
     <string name="filter_over_500mb">Over 500 MB</string>
     <string name="filter_older_30days">Older Than 30 Days</string>
-    <string name="no_large_files">No large files were found in the accessible Downloads and media folders.</string>
+    <string name="no_large_files">No files were found in the accessible Downloads and media folders.</string>
     <string name="choose_folder_to_scan">Choose Folder to Scan</string>
     <string name="folder_access_disclaimer">Folder access uses Android\'s Storage Access Framework. You stay in control of the location.</string>
 
@@ -50,7 +48,7 @@
 
     <string name="device_health_desc">Practical diagnostics, not RAM booster claims.</string>
     <string name="storage_pressure">Storage Pressure</string>
-    <string name="storage_pressure_low">Low space - review large files.</string>
+    <string name="storage_pressure_low">Low space - review downloads and media.</string>
     <string name="storage_pressure_healthy">Healthy free-space margin.</string>
     <string name="network_label">Network</string>
     <string name="network_connected">Internet connection detected.</string>
@@ -73,7 +71,7 @@
     <string name="review_cleanup_plan">Review Clean-up Plan</string>
     <string name="schedule_clean_own_cache">TeeVClean cache</string>
     <string name="schedule_clean_sweep">Temporary/log files in custom folders</string>
-    <string name="schedule_clean_large_files">Large files (500 MB+)</string>
+    <string name="schedule_clean_large_files">Downloads and media (500 MB+)</string>
     <string name="schedule_clean_old_files">Files older than 30 days</string>
     <string name="schedule_clean_installers">Installer APKs</string>
     <string name="remove_cache">Remove Cache</string>
@@ -83,7 +81,7 @@
     <string name="version_footer">TV Cleaner  .  v%1$s</string>
 
     <string name="scanning">Scanning…</string>
-    <string name="storage_access_rationale">To scan for large files, please grant folder access in Application Permission, or choose a folder below.</string>
+    <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
 
     <string name="settings_cleanup_schedule">Weekly Clean-up Schedule</string>
     <string name="settings_permissions">Application Permission</string>
@@ -96,7 +94,7 @@
     <string name="settings_storage_access_granted">Granted</string>
     <string name="settings_storage_access_denied">Not granted</string>
     <string name="settings_scanned_folders">Custom Folders</string>
-    <string name="settings_scanned_folders_desc">Folders added for large file and duplicate scanning. Add new folders from the Large Files screen.</string>
+    <string name="settings_scanned_folders_desc">Folders added for downloads, media and duplicate scanning. Add new folders from the Downloads and Media screen.</string>
     <string name="settings_no_folders">No custom folders added yet.</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_about">About TeeVClean</string>
