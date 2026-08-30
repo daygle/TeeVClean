@@ -1,5 +1,6 @@
 package com.teevclean.app
 
+import android.app.usage.StorageStatsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -7,6 +8,7 @@ import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
 import android.os.storage.StorageManager
 import android.provider.Settings
@@ -66,6 +68,40 @@ enum class CleanupFrequency(val intervalDays: Long?) {
     MONTHLY(30),
 }
 
+/** A device-storage breakdown. [systemAndOtherBytes] is what used space isn't attributed to user apps. */
+data class StorageBreakdown(
+    val totalBytes: Long,
+    val freeBytes: Long,
+    val appsBytes: Long,
+    val appCacheBytes: Long,
+    val appDataKnown: Boolean,
+) {
+    val usedBytes: Long get() = (totalBytes - freeBytes).coerceAtLeast(0)
+    val systemAndOtherBytes: Long get() = (usedBytes - appsBytes).coerceAtLeast(0)
+}
+
+/** Running totals for the cleanup-history card. */
+data class CleanupHistory(val lastRun: Long, val totalFreedBytes: Long, val totalItems: Int)
+
+/** Pure filename rules for cleanup, extracted so they can be unit-tested without Android. */
+object FileClassifier {
+    /** Junk that is always safe to remove: temp/log/thumbnail files and abandoned partial downloads. */
+    fun isJunk(name: String?): Boolean {
+        val lower = name?.lowercase() ?: return false
+        return lower.endsWith(".tmp") || lower.endsWith(".temp") || lower.endsWith(".log") ||
+            lower == ".ds_store" || lower == "thumbs.db" || lower.endsWith(".thumbnails") ||
+            lower.endsWith(".part") || lower.endsWith(".partial") ||
+            lower.endsWith(".crdownload") || lower.endsWith(".download")
+    }
+
+    /** Leftover app installers, worth reviewing for removal once the app is installed. */
+    fun isInstaller(name: String?): Boolean {
+        val lower = name?.lowercase() ?: return false
+        return lower.endsWith(".apk") || lower.endsWith(".xapk") ||
+            lower.endsWith(".apkm") || lower.endsWith(".obb")
+    }
+}
+
 class TeeVRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("teevclean_prefs", Context.MODE_PRIVATE)
 
@@ -90,6 +126,53 @@ class TeeVRepository(private val context: Context) {
         StorageSummary((total - stat.availableBytes).coerceIn(0L, total), total)
     }
 
+    /**
+     * Breaks device storage into user-app usage (with its cache subtotal) and everything else.
+     * App attribution needs usage access + API 26; without it [StorageBreakdown.appDataKnown] is
+     * false and only total/free are meaningful.
+     */
+    suspend fun storageBreakdown(): StorageBreakdown = withContext(Dispatchers.IO) {
+        val stat = StatFs(Environment.getDataDirectory().path)
+        val total = stat.blockCountLong * stat.blockSizeLong
+        val free = stat.availableBytes
+        var appsBytes = 0L
+        var cacheBytes = 0L
+        var known = false
+        val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.getSystemService(StorageStatsManager::class.java)
+        } else {
+            null
+        }
+        if (statsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            for (app in context.packageManager.getInstalledApplications(0)) {
+                if ((app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
+                try {
+                    val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, app.packageName, Process.myUserHandle())
+                    appsBytes += stats.appBytes + stats.dataBytes + stats.cacheBytes
+                    cacheBytes += stats.cacheBytes
+                    known = true
+                } catch (_: Exception) {
+                    // No usage access for this package; leave it out of the app total.
+                }
+            }
+        }
+        StorageBreakdown(total, free, appsBytes, cacheBytes, known)
+    }
+
+    fun getCleanupHistory(): CleanupHistory = CleanupHistory(
+        prefs.getLong(KEY_LAST_RUN, 0L),
+        prefs.getLong(KEY_TOTAL_FREED, 0L),
+        prefs.getInt(KEY_TOTAL_ITEMS, 0),
+    )
+
+    private fun recordCleanup(result: CleanupResult) {
+        prefs.edit {
+            putLong(KEY_LAST_RUN, System.currentTimeMillis())
+            putLong(KEY_TOTAL_FREED, prefs.getLong(KEY_TOTAL_FREED, 0L) + result.freedBytes)
+            putInt(KEY_TOTAL_ITEMS, prefs.getInt(KEY_TOTAL_ITEMS, 0) + result.itemsRemoved)
+        }
+    }
+
     /** All of TeeVClean's own cache locations. externalCacheDir can be null when no media is mounted. */
     private fun ownCacheDirs(): List<File> =
         listOfNotNull(context.cacheDir, context.codeCacheDir, context.externalCacheDir)
@@ -110,7 +193,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed)
+        CleanupResult(freed, removed).also { recordCleanup(it) }
     }
 
     suspend fun scanLargeFiles(): List<FileSummary> = withContext(Dispatchers.IO) {
@@ -208,7 +291,7 @@ class TeeVRepository(private val context: Context) {
                 removed++
             }
         }
-        CleanupResult(freed, removed)
+        CleanupResult(freed, removed).also { recordCleanup(it) }
     }
 
     /**
@@ -274,7 +357,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed)
+        CleanupResult(freed, removed).also { recordCleanup(it) }
     }
 
     private fun collectSafNodes(root: DocumentFile): List<DocumentFile> {
@@ -294,21 +377,9 @@ class TeeVRepository(private val context: Context) {
         return nodes
     }
 
-    private fun isJunk(name: String?): Boolean {
-        val lower = name?.lowercase() ?: return false
-        return lower.endsWith(".tmp") || lower.endsWith(".temp") || lower.endsWith(".log") ||
-            lower == ".ds_store" || lower == "thumbs.db" || lower.endsWith(".thumbnails") ||
-            // Abandoned partial downloads — safe to remove.
-            lower.endsWith(".part") || lower.endsWith(".partial") ||
-            lower.endsWith(".crdownload") || lower.endsWith(".download")
-    }
+    private fun isJunk(name: String?): Boolean = FileClassifier.isJunk(name)
 
-    /** Leftover app installers, which are safe to review for removal once the app is installed. */
-    private fun isInstaller(name: String?): Boolean {
-        val lower = name?.lowercase() ?: return false
-        return lower.endsWith(".apk") || lower.endsWith(".xapk") ||
-            lower.endsWith(".apkm") || lower.endsWith(".obb")
-    }
+    private fun isInstaller(name: String?): Boolean = FileClassifier.isInstaller(name)
 
     /** Opens the system "free up space" storage manager so the user can act device-wide. */
     fun openStorageManager() {
@@ -345,16 +416,38 @@ class TeeVRepository(private val context: Context) {
             emptyMap()
         }
 
+        val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.getSystemService(StorageStatsManager::class.java)
+        } else {
+            null
+        }
+
         pm.getInstalledApplications(0)
             .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
             .map { app ->
+                val apkBytes = File(app.sourceDir ?: "").length()
                 AppSummary(
                     app.loadLabel(pm).toString(),
                     app.packageName,
-                    File(app.sourceDir ?: "").length(),
+                    appStorageBytes(statsManager, app.packageName, apkBytes),
                     lastUsed[app.packageName] ?: 0L
                 )
             }.sortedByDescending { it.size }
+    }
+
+    /**
+     * Real footprint of an app: installed code + data + cache, via StorageStatsManager
+     * (needs usage access, API 26+). Falls back to the APK size when unavailable, so the
+     * value is never worse than the old estimate.
+     */
+    private fun appStorageBytes(statsManager: StorageStatsManager?, packageName: String, fallbackApk: Long): Long {
+        if (statsManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return fallbackApk
+        return try {
+            val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, packageName, Process.myUserHandle())
+            stats.appBytes + stats.dataBytes + stats.cacheBytes
+        } catch (_: Exception) {
+            fallbackApk
+        }
     }
 
     fun getCleanupFrequency(): CleanupFrequency =
@@ -439,6 +532,9 @@ class TeeVRepository(private val context: Context) {
         private const val MAX_SCAN_NODES = 5000
         private const val KEY_FREQUENCY = "cleanup_frequency"
         private const val KEY_INCLUDE_SWEEP = "cleanup_include_sweep"
+        private const val KEY_LAST_RUN = "cleanup_last_run"
+        private const val KEY_TOTAL_FREED = "cleanup_total_freed"
+        private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
 
         /** Ignore files below this size when hunting duplicates — tiny files aren't worth the churn. */
         private const val MIN_DUPLICATE_BYTES = 1L * 1024 * 1024
