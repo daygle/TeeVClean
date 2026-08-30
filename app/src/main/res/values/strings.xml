@@ -27,7 +27,7 @@
     <string name="review_cleanup">Review Clean-up</string>
 
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
-    <string name="this_app_cache">This App\'s Cache</string>
+    <string name="this_app_cache">TeeVClean Cache</string>
     <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
     <string name="other_app_caches">Other App Caches</string>
     <string name="other_app_caches_desc">Android requires each app\'s own info page.</string>
