@@ -16,7 +16,7 @@
 
     <application
         android:theme="@style/Theme.TeeVClean"
-        android:label="TeeVClean"
+        android:label="@string/app_name"
         android:banner="@drawable/teevclean_banner"
         android:icon="@drawable/ic_launcher">
         <activity

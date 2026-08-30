@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -330,7 +331,7 @@ fun SettingsScreen(
                 }
                 Text(stringResource(R.string.history_last_run, lastRun), color = Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.history_total_freed, formatBytes(history.totalFreedBytes), history.totalItems), color = Muted, fontSize = 14.sp)
+                Text(pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems), color = Muted, fontSize = 14.sp)
             }
         }
         item {

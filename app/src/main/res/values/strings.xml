@@ -34,13 +34,10 @@
     <string name="downloads_and_media">Downloads and Media</string>
     <string name="downloads_and_media_desc">Select files in the large-file review.</string>
     <string name="review_cleanup_plan">Review Cleanup Plan</string>
-    <string name="scheduled_cleanup_weekly">Scheduled Cleanup: Weekly</string>
-    <string name="schedule_weekly_cleanup">Schedule Weekly Cleanup</string>
 
     <string name="large_files_desc">Review files in shared storage. Unknown files are never deleted automatically.</string>
     <string name="filter_over_500mb">Over 500 MB</string>
     <string name="filter_older_30days">Older Than 30 Days</string>
-    <string name="filter_downloads">Downloads</string>
     <string name="no_large_files">No large files were found in the accessible Downloads and media folders.</string>
     <string name="choose_folder_to_scan">Choose Folder to Scan</string>
     <string name="folder_access_disclaimer">Folder access uses Android\'s Storage Access Framework. You stay in control of the location.</string>
@@ -65,10 +62,6 @@
     <string name="android_version">Android Version</string>
     <string name="thermal_disclaimer">Thermal readings vary by TV manufacturer and are not exposed on every device.</string>
 
-    <string name="scheduled_cleanup_title">Scheduled Cleanup</string>
-    <string name="scheduled_cleanup_enabled_desc">A weekly cleanup will clear only TeeVClean\'s own cache. Other apps, downloads, photos, and personal files are never touched.</string>
-    <string name="scheduled_cleanup_disabled_desc">Schedule a weekly cleanup of TeeVClean\'s own cache. This does not delete user files or clear other apps\' caches.</string>
-    <string name="turn_off">Turn Off</string>
     <string name="enable">Enable</string>
     <string name="cancel">Cancel</string>
 
@@ -81,8 +74,6 @@
     <string name="version_footer">TV Cleaner  •  v%1$s</string>
 
     <string name="scanning">Scanning…</string>
-    <string name="permission_required">Permission Required</string>
-    <string name="usage_access_rationale">To show when apps were last used, TeeVClean needs Usage Access permission. Tap here to open settings.</string>
     <string name="storage_access_rationale">To scan for large files, please add a folder for the app to analyze.</string>
 
     <string name="settings_cleanup_schedule">Weekly Cleanup Schedule</string>
@@ -98,8 +89,6 @@
     <string name="temp_and_logs_desc">Remove leftover temp, log and thumbnail files in the folders you added.</string>
     <string name="free_up_space">Open Android “Free up space”</string>
     <string name="delete">Delete</string>
-    <string name="confirm_delete_file">Delete this file?</string>
-    <string name="confirm_delete_file_desc">%1$s (%2$s) will be permanently deleted from your storage. This cannot be undone.</string>
     <string name="confirm_sweep_desc">Remove leftover temp, log and thumbnail files, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Cleanup</string>
     <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included — never your files or other apps\' caches.</string>
@@ -165,7 +154,10 @@
     <string name="settings_history">Cleanup History</string>
     <string name="history_never">never</string>
     <string name="history_last_run">Last run: %1$s</string>
-    <string name="history_total_freed">Freed %1$s across %2$d items in total.</string>
+    <plurals name="history_total_freed">
+        <item quantity="one">Freed %1$s across %2$d item in total.</item>
+        <item quantity="other">Freed %1$s across %2$d items in total.</item>
+    </plurals>
     <string name="remove_folder">Remove folder</string>
     <string name="about_version">TeeVClean version %1$s</string>
 

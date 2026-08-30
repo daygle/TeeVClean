@@ -1,9 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="teevclean_ink">#101311</color>
-    <color name="teevclean_screen">#0E1510</color>
-    <color name="teevclean_frame">#1E2A1B</color>
-    <color name="teevclean_lime">#B7F35B</color>
-    <color name="teevclean_muted">#9BA79C</color>
-    <color name="teevclean_white">#FFFFFF</color>
 </resources>
