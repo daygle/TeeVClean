@@ -202,6 +202,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 onReview = { showCleanup = true },
                                 onSweep = { showSweep = true },
                                 onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
+                                onFreeUpSpace = { viewModel.openStorageManager() },
                                 onNavigate = { viewModel.currentScreen = it },
                             )
                             Screen.LARGE -> {
@@ -241,7 +242,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
                                 onBack = { viewModel.currentScreen = Screen.CLEAN },
                             )
-                            Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary) { viewModel.openStorageManager() }
+                            Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
                             Screen.BREAKDOWN -> StorageBreakdownScreen(
                                 breakdown = viewModel.storageBreakdown,
                                 isLoading = viewModel.isLoadingBreakdown,
@@ -343,6 +344,7 @@ private fun CleanupScreen(
     onReview: () -> Unit,
     onSweep: () -> Unit,
     onFindDuplicates: () -> Unit,
+    onFreeUpSpace: () -> Unit,
     onNavigate: (Screen) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -387,6 +389,14 @@ private fun CleanupScreen(
                 stringResource(R.string.duplicates_desc),
                 stringResource(R.string.action_scan),
                 onClick = onFindDuplicates,
+            )
+        }
+        item {
+            ActionRow(
+                stringResource(R.string.free_up_space),
+                stringResource(R.string.other_app_caches_desc),
+                stringResource(R.string.action_open),
+                onClick = onFreeUpSpace,
             )
         }
     }
@@ -648,7 +658,7 @@ private fun BreakdownRow(label: String, value: String, swatch: Color, indent: Bo
 }
 
 @Composable
-private fun HealthScreen(context: Context, storage: StorageSummary, onFreeUpSpace: () -> Unit) {
+private fun HealthScreen(context: Context, storage: StorageSummary) {
     val manager = context.getSystemService(ConnectivityManager::class.java)
     val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -663,10 +673,6 @@ private fun HealthScreen(context: Context, storage: StorageSummary, onFreeUpSpac
         item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true) }
         item { ResultRow(stringResource(R.string.device_model), "${Build.MANUFACTURER}", Build.MODEL, true) }
         item { ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), "Android ${Build.VERSION.RELEASE}", true) }
-        item {
-            Spacer(Modifier.height(10.dp))
-            TvButton(onClick = onFreeUpSpace) { Text(stringResource(R.string.free_up_space)) }
-        }
         item {
             Spacer(Modifier.height(8.dp))
             Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp)
