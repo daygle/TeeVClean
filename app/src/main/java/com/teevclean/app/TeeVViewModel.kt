@@ -77,6 +77,14 @@ enum class Screen(val labelRes: Int, val icon: ImageVector) {
                 "-8.55,11.54L12,21.35z",
         ),
     ),
+    BREAKDOWN(
+        R.string.storage_breakdown,
+        menuIcon(
+            "breakdown",
+            "M11,2v20c-5.07,-0.5,-9,-4.79,-9,-10s3.93,-9.5,9,-10zm2.03,0v8.99H22c-0.47,-4.74," +
+                "-4.24,-8.52,-8.97,-8.99zm0,11.01V22c4.74,-0.47,8.5,-4.25,8.97,-8.99h-8.97z",
+        ),
+    ),
     DUPLICATES(
         R.string.duplicates,
         menuIcon(
@@ -106,8 +114,12 @@ enum class Screen(val labelRes: Int, val icon: ImageVector) {
     ),
 }
 
-class TeeVViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = TeeVRepository(application)
+class TeeVViewModel(
+    application: Application,
+    private val repository: TeeVRepository,
+) : AndroidViewModel(application) {
+    /** Production constructor used by the default ViewModel factory. */
+    constructor(application: Application) : this(application, TeeVRepository(application))
 
     var currentScreen by mutableStateOf(Screen.OVERVIEW)
     var storageSummary by mutableStateOf(StorageSummary(0, 0))
@@ -121,6 +133,9 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
     var lastCleanupResult by mutableStateOf<CleanupResult?>(null)
     var duplicateGroups by mutableStateOf(emptyList<DuplicateGroup>())
     var isScanningDuplicates by mutableStateOf(false)
+    var cleanupHistory by mutableStateOf(repository.getCleanupHistory())
+    var storageBreakdown by mutableStateOf<StorageBreakdown?>(null)
+    var isLoadingBreakdown by mutableStateOf(false)
 
     init {
         refreshData()
@@ -136,7 +151,16 @@ class TeeVViewModel(application: Application) : AndroidViewModel(application) {
             cleanupFrequency = repository.getCleanupFrequency()
             scheduleSweepEnabled = repository.isScheduledSweepEnabled()
             customFolders = repository.getCustomFolders()
+            cleanupHistory = repository.getCleanupHistory()
             isRefreshing = false
+        }
+    }
+
+    fun loadBreakdown() {
+        viewModelScope.launch {
+            isLoadingBreakdown = true
+            storageBreakdown = repository.storageBreakdown()
+            isLoadingBreakdown = false
         }
     }
 

@@ -154,6 +154,21 @@
         <item quantity="one">Delete %1$d extra copy</item>
         <item quantity="other">Delete %1$d extra copies</item>
     </plurals>
+    <string name="storage_breakdown">Storage Breakdown</string>
+    <string name="storage_breakdown_desc">Where your space has gone — user apps (with their cache) versus the system and everything else.</string>
+    <string name="breakdown_apps">Apps &amp; data</string>
+    <string name="breakdown_app_cache">of which cache</string>
+    <string name="breakdown_system_other">System &amp; other</string>
+    <string name="breakdown_free">Free</string>
+    <string name="breakdown_needs_usage">Grant Usage Access (App Review) to attribute space to individual apps.</string>
+
+    <string name="settings_history">Cleanup History</string>
+    <string name="history_never">never</string>
+    <string name="history_last_run">Last run: %1$s</string>
+    <string name="history_total_freed">Freed %1$s across %2$d items in total.</string>
+    <string name="remove_folder">Remove folder</string>
+    <string name="about_version">TeeVClean version %1$s</string>
+
     <string name="confirm_delete_dupes">Delete duplicate copies?</string>
     <plurals name="confirm_delete_dupes_desc">
         <item quantity="one">%1$d copy will be removed, keeping 1. Frees %2$s.</item>

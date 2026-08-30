@@ -21,9 +21,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -164,9 +166,17 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 onBack = { viewModel.currentScreen = Screen.CLEAN },
                             )
                             Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
+                            Screen.BREAKDOWN -> StorageBreakdownScreen(
+                                breakdown = viewModel.storageBreakdown,
+                                isLoading = viewModel.isLoadingBreakdown,
+                                onLoad = { viewModel.loadBreakdown() },
+                                onBack = { viewModel.currentScreen = Screen.OVERVIEW },
+                            )
                             Screen.SETTINGS -> SettingsScreen(
                                 scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
                                 customFolders = viewModel.customFolders,
+                                history = viewModel.cleanupHistory,
+                                appVersion = "1.0",
                                 onEditSchedule = { showSchedule = true },
                                 onRemoveFolder = { viewModel.removeCustomFolder(it) },
                             )
@@ -189,6 +199,15 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
             StorageCard(storage, onClean)
         }
         item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
+        item {
+            FeatureCard(
+                stringResource(R.string.storage_breakdown),
+                stringResource(R.string.storage_breakdown_desc),
+                "Storage",
+                "View",
+Screen.BREAKDOWN.icon
+            ) { onNavigate(Screen.BREAKDOWN) }
+        }
         item {
             FeatureCard(
                 stringResource(R.string.large_files),
@@ -492,6 +511,65 @@ private fun DuplicatesScreen(
             TvButton(onClick = onScan) { Text(stringResource(R.string.rescan)) }
             TvTextButton(onClick = onBack) { Text(stringResource(R.string.safe_cleanup)) }
         }
+    }
+}
+
+@Composable
+private fun StorageBreakdownScreen(
+    breakdown: StorageBreakdown?,
+    isLoading: Boolean,
+    onLoad: () -> Unit,
+    onBack: () -> Unit,
+) {
+    LaunchedEffect(Unit) { if (breakdown == null && !isLoading) onLoad() }
+
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(stringResource(R.string.storage_breakdown), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.storage_breakdown_desc), color = Muted, fontSize = 16.sp)
+        if (isLoading || breakdown == null) {
+            Text(stringResource(R.string.scanning), color = Lime, fontSize = 15.sp)
+        } else {
+            val orange = Color(0xFFFFB74D)
+            val gray = Color(0xFF303930)
+            val total = breakdown.totalBytes.coerceAtLeast(1)
+            val appsFrac = breakdown.appsBytes.toFloat() / total
+            val sysFrac = breakdown.systemAndOtherBytes.toFloat() / total
+            val freeFrac = breakdown.freeBytes.toFloat() / total
+
+            Text(
+                stringResource(R.string.used_of_total, formatBytes(breakdown.usedBytes), formatBytes(breakdown.totalBytes)),
+                color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+            )
+            Row(Modifier.fillMaxWidth().height(18.dp).clip(RoundedCornerShape(6.dp)).background(gray)) {
+                if (appsFrac > 0f) Box(Modifier.weight(appsFrac).fillMaxHeight().background(Lime))
+                if (sysFrac > 0f) Box(Modifier.weight(sysFrac).fillMaxHeight().background(orange))
+                if (freeFrac > 0f) Box(Modifier.weight(freeFrac).fillMaxHeight())
+            }
+            if (breakdown.appDataKnown) {
+                BreakdownRow(stringResource(R.string.breakdown_apps), formatBytes(breakdown.appsBytes), Lime)
+                BreakdownRow(stringResource(R.string.breakdown_app_cache), formatBytes(breakdown.appCacheBytes), Muted, indent = true)
+            }
+            BreakdownRow(stringResource(R.string.breakdown_system_other), formatBytes(breakdown.systemAndOtherBytes), orange)
+            BreakdownRow(stringResource(R.string.breakdown_free), formatBytes(breakdown.freeBytes), gray)
+            if (!breakdown.appDataKnown) {
+                Text(stringResource(R.string.breakdown_needs_usage), color = Muted, fontSize = 13.sp)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TvButton(onClick = onLoad) { Text(stringResource(R.string.rescan)) }
+            TvTextButton(onClick = onBack) { Text(stringResource(R.string.overview)) }
+        }
+    }
+}
+
+@Composable
+private fun BreakdownRow(label: String, value: String, swatch: Color, indent: Boolean = false) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (indent) Spacer(Modifier.width(20.dp))
+        Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(swatch))
+        Spacer(Modifier.width(12.dp))
+        Text(label, color = if (indent) Muted else Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

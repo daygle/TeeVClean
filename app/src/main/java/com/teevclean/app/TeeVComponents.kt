@@ -63,7 +63,9 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
             Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(62.dp))
-        Screen.entries.filter { it != Screen.SETTINGS && it != Screen.DUPLICATES }.forEach { screen -> NavItem(screen, selected, onSelect) }
+        Screen.entries
+            .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN }
+            .forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect)
         Text(stringResource(R.string.version_footer, "1.0"), color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
@@ -109,7 +111,7 @@ fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
         )
         Icon(
             imageVector = screen.icon,
-            contentDescription = null,
+            contentDescription = stringResource(screen.labelRes),
             tint = if (isFocused || active) Color.White else Muted,
             modifier = Modifier.padding(start = 14.dp).size(18.dp)
         )
@@ -271,7 +273,7 @@ fun FeatureCard(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = Lime, modifier = Modifier.size(22.dp)) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = title, tint = Lime, modifier = Modifier.size(22.dp)) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
     }
 }
 
@@ -295,6 +297,8 @@ fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
 fun SettingsScreen(
     scheduleSummary: String,
     customFolders: List<String>,
+    history: CleanupHistory,
+    appVersion: String,
     onEditSchedule: () -> Unit,
     onRemoveFolder: (String) -> Unit
 ) {
@@ -317,6 +321,20 @@ fun SettingsScreen(
         }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                Text(stringResource(R.string.settings_history), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                val lastRun = if (history.lastRun == 0L) {
+                    stringResource(R.string.history_never)
+                } else {
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
+                }
+                Text(stringResource(R.string.history_last_run, lastRun), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.history_total_freed, formatBytes(history.totalFreedBytes), history.totalItems), color = Muted, fontSize = 14.sp)
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
                 Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 if (customFolders.isEmpty()) {
@@ -326,12 +344,23 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                             Text(folder, color = Muted, modifier = Modifier.weight(1f), maxLines = 1)
                             IconButton(onClick = { onRemoveFolder(folder) }) {
-                                Icon(Icons.Outlined.Delete, null, tint = Color.Red)
+                                Icon(Icons.Outlined.Delete, stringResource(R.string.remove_folder), tint = Color.Red)
                             }
                         }
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                     }
                 }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                Text(stringResource(R.string.settings_about), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.about_version, appVersion), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.settings_privacy_policy), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.privacy_desc), color = Muted, fontSize = 13.sp)
             }
         }
     }
