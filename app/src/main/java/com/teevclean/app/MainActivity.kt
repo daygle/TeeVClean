@@ -240,7 +240,6 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 isScanning = viewModel.isScanningDuplicates,
                                 onScan = { viewModel.findDuplicates() },
                                 onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
-                                onBack = { viewModel.currentScreen = Screen.CLEAN },
                             )
                             Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
                             Screen.BREAKDOWN -> StorageBreakdownScreen(
@@ -539,7 +538,6 @@ private fun DuplicatesScreen(
     isScanning: Boolean,
     onScan: () -> Unit,
     onDeleteExtras: (List<FileSummary>) -> Unit,
-    onBack: () -> Unit,
 ) {
     var pending by remember { mutableStateOf<DuplicateGroup?>(null) }
     LaunchedEffect(Unit) { if (groups.isEmpty() && !isScanning) onScan() }
@@ -590,10 +588,7 @@ private fun DuplicatesScreen(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TvButton(onClick = onScan) { Text(stringResource(R.string.rescan)) }
-            TvTextButton(onClick = onBack) { Text(stringResource(R.string.cleanup)) }
-        }
+        TvButton(onClick = onScan) { Text(stringResource(R.string.rescan)) }
     }
 }
 

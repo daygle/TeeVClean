@@ -29,7 +29,7 @@
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">TeeVClean Cache</string>
     <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
-    <string name="other_app_caches">Other App Caches</string>
+    <string name="other_app_caches">Other Application Caches</string>
     <string name="other_app_caches_desc">Android requires each app\'s own info page.</string>
     <string name="downloads_and_media">Downloads and Media</string>
     <string name="downloads_and_media_desc">Select files in the large-file review.</string>
@@ -72,7 +72,7 @@
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
     <string name="review_cleanup_plan">Review Clean-up Plan</string>
     <string name="schedule_clean_own_cache">TeeVClean cache</string>
-    <string name="schedule_clean_sweep">Temp &amp; log files in custom folders</string>
+    <string name="schedule_clean_sweep">Temporary/log files in custom folders</string>
     <string name="schedule_clean_large_files">Large files (500 MB+)</string>
     <string name="schedule_clean_old_files">Files older than 30 days</string>
     <string name="schedule_clean_installers">Installer APKs</string>
@@ -104,7 +104,7 @@
     <string name="action_open">Open</string>
     <string name="action_review">Review</string>
     <string name="action_sweep">Sweep</string>
-    <string name="temp_and_logs">Temp &amp; Log Files</string>
+    <string name="temp_and_logs">Temporary/Log Files</string>
     <string name="temp_and_logs_desc">Remove leftover temp, log and thumbnail files in the folders you added.</string>
     <string name="free_up_space">Open Android “Free up space”</string>
     <string name="delete">Delete</string>
@@ -118,7 +118,7 @@
     <string name="freq_monthly">Monthly</string>
     <string name="schedule_items_label">What to clean</string>
     <string name="schedule_cache_always">TeeVClean cache - always included</string>
-    <string name="schedule_include_sweep">Temp &amp; log files in my folders</string>
+    <string name="schedule_include_sweep">Temporary/log files in my folders</string>
     <string name="schedule_sweep_needs_folder">Add a custom folder in Settings to enable this.</string>
     <string name="schedule_cta">Schedule Clean-up</string>
     <string name="schedule_status">Scheduled: %1$s</string>
