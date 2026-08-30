@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Pure-logic unit tests — no Android framework needed. */
+/** Pure-logic unit tests - no Android framework needed. */
 class CleanupLogicTest {
 
     @Test

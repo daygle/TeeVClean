@@ -21,6 +21,9 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -131,32 +134,38 @@ class TeeVRepository(private val context: Context) {
      * App attribution needs usage access + API 26; without it [StorageBreakdown.appDataKnown] is
      * false and only total/free are meaningful.
      */
-    suspend fun storageBreakdown(): StorageBreakdown = withContext(Dispatchers.IO) {
-        val stat = StatFs(Environment.getDataDirectory().path)
-        val total = stat.blockCountLong * stat.blockSizeLong
-        val free = stat.availableBytes
-        var appsBytes = 0L
-        var cacheBytes = 0L
-        var known = false
-        val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.getSystemService(StorageStatsManager::class.java)
-        } else {
-            null
-        }
-        if (statsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            for (app in context.packageManager.getInstalledApplications(0)) {
-                if ((app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
-                try {
-                    val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, app.packageName, Process.myUserHandle())
-                    appsBytes += stats.appBytes + stats.dataBytes + stats.cacheBytes
-                    cacheBytes += stats.cacheBytes
-                    known = true
-                } catch (_: Exception) {
-                    // No usage access for this package; leave it out of the app total.
-                }
+    suspend fun storageBreakdown(): StorageBreakdown = coroutineScope {
+        withContext(Dispatchers.IO) {
+            val stat = StatFs(Environment.getDataDirectory().path)
+            val total = stat.blockCountLong * stat.blockSizeLong
+            val free = stat.availableBytes
+            val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.getSystemService(StorageStatsManager::class.java)
+            } else {
+                null
+            }
+
+            if (statsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val appStats = context.packageManager.getInstalledApplications(0)
+                    .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
+                    .map { app ->
+                        async {
+                            try {
+                                val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, app.packageName, Process.myUserHandle())
+                                stats.appBytes + stats.dataBytes + stats.cacheBytes to stats.cacheBytes
+                            } catch (_: Exception) {
+                                0L to 0L
+                            }
+                        }
+                    }.awaitAll()
+
+                val appsBytes = appStats.sumOf { it.first }
+                val cacheBytes = appStats.sumOf { it.second }
+                StorageBreakdown(total, free, appsBytes, cacheBytes, true)
+            } else {
+                StorageBreakdown(total, free, 0L, 0L, false)
             }
         }
-        StorageBreakdown(total, free, appsBytes, cacheBytes, known)
     }
 
     fun getCleanupHistory(): CleanupHistory = CleanupHistory(
@@ -300,22 +309,26 @@ class TeeVRepository(private val context: Context) {
      * first [FINGERPRINT_BYTES]), which is fast and a strong signal for real-world media
      * and documents. Deletion is always user-confirmed, so the fingerprint heuristic is safe.
      */
-    suspend fun scanDuplicates(): List<DuplicateGroup> = withContext(Dispatchers.IO) {
-        val candidates = getCustomFolders().flatMap { uriString ->
-            walkSafTree(uriString) { doc -> doc.length() >= MIN_DUPLICATE_BYTES }
-        }
-        candidates
-            .groupBy { it.size }
-            .filterValues { it.size > 1 }
-            .flatMap { (size, sameSize) ->
-                sameSize
-                    .groupBy { fileFingerprint(it.uri) }
-                    .filterKeys { it != null }
-                    .values
-                    .filter { it.size > 1 }
-                    .map { group -> DuplicateGroup(group.sortedByDescending { it.modified }, size) }
+    suspend fun scanDuplicates(): List<DuplicateGroup> = coroutineScope {
+        withContext(Dispatchers.IO) {
+            val candidates = getCustomFolders().flatMap { uriString ->
+                walkSafTree(uriString) { doc -> doc.length() >= MIN_DUPLICATE_BYTES }
             }
-            .sortedByDescending { it.reclaimableBytes }
+            candidates
+                .groupBy { it.size }
+                .filterValues { it.size > 1 }
+                .flatMap { (size, sameSize) ->
+                    sameSize
+                        .map { file -> async { fileFingerprint(file.uri) to file } }
+                        .awaitAll()
+                        .groupBy({ it.first }, { it.second })
+                        .filterKeys { it != null }
+                        .values
+                        .filter { it.size > 1 }
+                        .map { group -> DuplicateGroup(group.sortedByDescending { it.modified }, size) }
+                }
+                .sortedByDescending { it.reclaimableBytes }
+        }
     }
 
     private fun fileFingerprint(uriString: String): String? = try {
@@ -406,33 +419,37 @@ class TeeVRepository(private val context: Context) {
             ?.associate { it.packageName to it.lastTimeUsed }
             .orEmpty()
 
-    suspend fun loadApps(): List<AppSummary> = withContext(Dispatchers.IO) {
-        val pm = context.packageManager
-        val usage = context.getSystemService(UsageStatsManager::class.java)
-        val since = System.currentTimeMillis() - 180L * 24 * 60 * 60 * 1000
-        val lastUsed = try {
-            readLastUsedByPackage(usage, since)
-        } catch (_: SecurityException) {
-            emptyMap()
-        }
+    suspend fun loadApps(): List<AppSummary> = coroutineScope {
+        withContext(Dispatchers.IO) {
+            val pm = context.packageManager
+            val usage = context.getSystemService(UsageStatsManager::class.java)
+            val since = System.currentTimeMillis() - 180L * 24 * 60 * 60 * 1000
+            val lastUsed = try {
+                readLastUsedByPackage(usage, since)
+            } catch (_: SecurityException) {
+                emptyMap()
+            }
 
-        val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.getSystemService(StorageStatsManager::class.java)
-        } else {
-            null
-        }
+            val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.getSystemService(StorageStatsManager::class.java)
+            } else {
+                null
+            }
 
-        pm.getInstalledApplications(0)
-            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
-            .map { app ->
-                val apkBytes = File(app.sourceDir ?: "").length()
-                AppSummary(
-                    app.loadLabel(pm).toString(),
-                    app.packageName,
-                    appStorageBytes(statsManager, app.packageName, apkBytes),
-                    lastUsed[app.packageName] ?: 0L
-                )
-            }.sortedByDescending { it.size }
+            pm.getInstalledApplications(0)
+                .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
+                .map { app ->
+                    async {
+                        val apkBytes = File(app.sourceDir ?: "").length()
+                        AppSummary(
+                            app.loadLabel(pm).toString(),
+                            app.packageName,
+                            appStorageBytes(statsManager, app.packageName, apkBytes),
+                            lastUsed[app.packageName] ?: 0L
+                        )
+                    }
+                }.awaitAll().sortedByDescending { it.size }
+        }
     }
 
     /**
@@ -459,7 +476,7 @@ class TeeVRepository(private val context: Context) {
 
     /**
      * Configures the recurring background cleanup. Only unattended-safe actions are ever
-     * scheduled: the app's own cache always, and — when [includeSweep] is set — the temp/log
+     * scheduled: the app's own cache always, and - when [includeSweep] is set - the temp/log
      * sweep of folders the user granted. Other apps' caches and user-file deletion are never
      * automated because they need explicit interaction.
      */
@@ -488,7 +505,11 @@ class TeeVRepository(private val context: Context) {
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            // Intent not supported or package missing.
+        }
     }
 
     /** Launches the system uninstall prompt for a package. The user confirms the removal. */
@@ -536,7 +557,7 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_TOTAL_FREED = "cleanup_total_freed"
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
 
-        /** Ignore files below this size when hunting duplicates — tiny files aren't worth the churn. */
+        /** Ignore files below this size when hunting duplicates - tiny files aren't worth the churn. */
         private const val MIN_DUPLICATE_BYTES = 1L * 1024 * 1024
 
         /** Bytes hashed per file to fingerprint content for duplicate detection. */

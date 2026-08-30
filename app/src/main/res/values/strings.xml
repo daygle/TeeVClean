@@ -1,9 +1,9 @@
 <resources>
     <string name="app_name">TeeVClean</string>
     <string name="overview">Overview</string>
-    <string name="safe_cleanup">Safe Cleanup</string>
+    <string name="cleanup">Cleanup</string>
     <string name="large_files">Large Files</string>
-    <string name="app_review">App Review</string>
+    <string name="apps">Applications</string>
     <string name="device_health">Device Health</string>
     <string name="settings">Settings</string>
 
@@ -24,9 +24,9 @@
     <string name="storage_health_label">Storage Health</string>
     <string name="used_of_total">%1$s of %2$s used</string>
     <string name="available_space_label">available space</string>
-    <string name="review_safe_cleanup">Review Safe Cleanup</string>
+    <string name="review_cleanup">Review Cleanup</string>
 
-    <string name="safe_cleanup_desc">Scan temporary files and review every item before removal.</string>
+    <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">This App\'s Cache</string>
     <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
     <string name="other_app_caches">Other App Caches</string>
@@ -50,7 +50,7 @@
 
     <string name="device_health_desc">Practical diagnostics, not RAM booster claims.</string>
     <string name="storage_pressure">Storage Pressure</string>
-    <string name="storage_pressure_low">Low space — review large files.</string>
+    <string name="storage_pressure_low">Low space - review large files.</string>
     <string name="storage_pressure_healthy">Healthy free-space margin.</string>
     <string name="network_label">Network</string>
     <string name="network_connected">Internet connection detected.</string>
@@ -65,18 +65,23 @@
     <string name="enable">Enable</string>
     <string name="cancel">Cancel</string>
 
-    <string name="confirm_safe_cleanup">Confirm Safe Cleanup</string>
+    <string name="confirm_cleanup">Confirm Cleanup</string>
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
     <string name="remove_cache">Remove Cache</string>
 
     <string name="last_used_unavailable">Last used unavailable</string>
     <string name="last_used_at">Last used %1$s</string>
-    <string name="version_footer">TV Cleaner  •  v%1$s</string>
+    <string name="version_footer">TV Cleaner  .  v%1$s</string>
 
     <string name="scanning">Scanning…</string>
     <string name="storage_access_rationale">To scan for large files, please add a folder for the app to analyze.</string>
 
     <string name="settings_cleanup_schedule">Weekly Cleanup Schedule</string>
+    <string name="settings_permissions">App Permissions</string>
+    <string name="settings_usage_access">Usage Access</string>
+    <string name="settings_usage_access_granted">Granted</string>
+    <string name="settings_usage_access_denied">Not granted</string>
+    <string name="settings_usage_access_desc">Required to show when apps were last used and for the detailed storage breakdown.</string>
     <string name="settings_scanned_folders">Scanned Folders</string>
     <string name="settings_no_folders">No custom folders added yet.</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
@@ -91,14 +96,14 @@
     <string name="delete">Delete</string>
     <string name="confirm_sweep_desc">Remove leftover temp, log and thumbnail files, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Cleanup</string>
-    <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included — never your files or other apps\' caches.</string>
+    <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included - never your files or other apps\' caches.</string>
     <string name="schedule_frequency_label">How often</string>
     <string name="freq_off">Off</string>
     <string name="freq_daily">Daily</string>
     <string name="freq_weekly">Weekly</string>
     <string name="freq_monthly">Monthly</string>
     <string name="schedule_items_label">What to clean</string>
-    <string name="schedule_cache_always">TeeVClean cache — always included</string>
+    <string name="schedule_cache_always">TeeVClean cache - always included</string>
     <string name="schedule_include_sweep">Temp &amp; log files in my folders</string>
     <string name="schedule_sweep_needs_folder">Add a folder in Large Files to enable this.</string>
     <string name="schedule_cta">Schedule Cleanup</string>
@@ -108,8 +113,9 @@
     <string name="save">Save</string>
 
     <string name="cleanup_complete">Cleanup Complete</string>
-    <string name="cleanup_nothing">Everything was already clean — nothing to remove.</string>
+    <string name="cleanup_nothing">Everything was already clean - nothing to remove.</string>
     <string name="done">Done</string>
+    <string name="feature_not_supported">This feature is not supported on your device (system component missing).</string>
     <plurals name="cleanup_freed">
         <item quantity="one">Freed %1$s across %2$d item.</item>
         <item quantity="other">Freed %1$s across %2$d items.</item>
@@ -144,12 +150,12 @@
         <item quantity="other">Delete %1$d extra copies</item>
     </plurals>
     <string name="storage_breakdown">Storage Breakdown</string>
-    <string name="storage_breakdown_desc">Where your space has gone — user apps (with their cache) versus the system and everything else.</string>
+    <string name="storage_breakdown_desc">Where your space has gone - user apps (with their cache) versus the system and everything else.</string>
     <string name="breakdown_apps">Apps &amp; data</string>
     <string name="breakdown_app_cache">of which cache</string>
     <string name="breakdown_system_other">System &amp; other</string>
     <string name="breakdown_free">Free</string>
-    <string name="breakdown_needs_usage">Grant Usage Access (App Review) to attribute space to individual apps.</string>
+    <string name="breakdown_needs_usage">Grant Usage Access (Applications) to attribute space to individual apps.</string>
 
     <string name="settings_history">Cleanup History</string>
     <string name="history_never">never</string>

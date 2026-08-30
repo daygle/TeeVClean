@@ -11,7 +11,7 @@ class CleanupWorker(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result =
         try {
-            // Only unattended-safe actions run here — never user files or other apps' caches.
+            // Only unattended-safe actions run here - never user files or other apps' caches.
             val repository = TeeVRepository(applicationContext)
             repository.clearOwnCache()
             if (inputData.getBoolean(TeeVRepository.INCLUDE_SWEEP, false)) {

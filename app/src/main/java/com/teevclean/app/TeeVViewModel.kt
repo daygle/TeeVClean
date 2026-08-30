@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 /**
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
  *
  * The path is given an explicit solid fill (the [Icon] composable recolours it via
  * its tint) so every glyph renders regardless of the builder's default brush. All
- * paths are closed, filled shapes — earlier open "stroke" paths never painted.
+ * paths are closed, filled shapes - earlier open "stroke" paths never painted.
  */
 private fun menuIcon(
     name: String,
@@ -44,7 +45,7 @@ enum class Screen(val labelRes: Int, val icon: ImageVector) {
         menuIcon("overview", "M3,13h8V3H3v10zm0,8h8v-6H3v6zm10,0h8V11h-8v10zm0,-18v6h8V3h-8z"),
     ),
     CLEAN(
-        R.string.safe_cleanup,
+        R.string.cleanup,
         menuIcon(
             "clean",
             "M16,11h-1V3c0,-1.1,-0.9,-2,-2,-2h-2C9.9,1,9,1.9,9,3v8H8c-1.66,0,-3,1.34,-3,3v7h1v1c0," +
@@ -61,7 +62,7 @@ enum class Screen(val labelRes: Int, val icon: ImageVector) {
         ),
     ),
     APPS(
-        R.string.app_review,
+        R.string.apps,
         menuIcon(
             "apps",
             "M4,8h4V4H4v4zm6,12h4v-4h-4v4zm-6,0h4v-4H4v4zm0,-6h4v-4H4v4zm6,0h4v-4h-4v4zm6,-10v4h4V4" +
@@ -144,14 +145,21 @@ class TeeVViewModel(
     fun refreshData() {
         viewModelScope.launch {
             isRefreshing = true
-            storageSummary = repository.readStorage()
-            apps = repository.loadApps()
-            largeFiles = repository.scanLargeFiles()
-            cacheSize = repository.getCacheSize()
+            val storageDeferred = async { repository.readStorage() }
+            val appsDeferred = async { repository.loadApps() }
+            val filesDeferred = async { repository.scanLargeFiles() }
+            val cacheDeferred = async { repository.getCacheSize() }
+            val historyDeferred = async { repository.getCleanupHistory() }
+
+            storageSummary = storageDeferred.await()
+            apps = appsDeferred.await()
+            largeFiles = filesDeferred.await()
+            cacheSize = cacheDeferred.await()
+            cleanupHistory = historyDeferred.await()
+
             cleanupFrequency = repository.getCleanupFrequency()
             scheduleSweepEnabled = repository.isScheduledSweepEnabled()
             customFolders = repository.getCustomFolders()
-            cleanupHistory = repository.getCleanupHistory()
             isRefreshing = false
         }
     }

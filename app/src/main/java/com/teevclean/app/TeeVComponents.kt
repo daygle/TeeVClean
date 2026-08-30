@@ -287,7 +287,7 @@ fun StorageCard(storage: StorageSummary, onClean: () -> Unit) {
                 Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.available_space_label), color = Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(14.dp))
-                TvButton(onClick = onClean) { Text(stringResource(R.string.review_safe_cleanup)) } 
+                TvButton(onClick = onClean) { Text(stringResource(R.string.review_cleanup)) } 
             }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
@@ -299,8 +299,10 @@ fun SettingsScreen(
     scheduleSummary: String,
     customFolders: List<String>,
     history: CleanupHistory,
+    hasUsageAccess: Boolean,
     appVersion: String,
     onEditSchedule: () -> Unit,
+    onEnableUsage: () -> Unit,
     onRemoveFolder: (String) -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -318,6 +320,28 @@ fun SettingsScreen(
                         Text(stringResource(R.string.schedule_change))
                     }
                 }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                Text(stringResource(R.string.settings_permissions), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_usage_access), color = Color.White, fontSize = 15.sp)
+                        Text(
+                            if (hasUsageAccess) stringResource(R.string.settings_usage_access_granted)
+                            else stringResource(R.string.settings_usage_access_denied),
+                            color = if (hasUsageAccess) Lime else Color(0xFFFFB74D),
+                            fontSize = 13.sp
+                        )
+                    }
+                    TvButton(onClick = onEnableUsage) {
+                        Text(if (hasUsageAccess) stringResource(R.string.action_open) else stringResource(R.string.enable))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.settings_usage_access_desc), color = Muted, fontSize = 13.sp)
             }
         }
         item {
@@ -450,5 +474,3 @@ fun TvTextButton(
         content()
     }
 }
-
-fun formatBytes(bytes: Long): String { if (bytes < 1024) return "$bytes B"; val units = arrayOf("KB", "MB", "GB", "TB"); var value = bytes.toDouble(); var index = -1; while (value >= 1024 && index < units.lastIndex) { value /= 1024; index++ }; return String.format(Locale.US, "%.1f %s", value, units[index]) }

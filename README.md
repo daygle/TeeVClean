@@ -11,11 +11,11 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 ## 🌟 Features
 
 - **Storage Health Dashboard**: Real-time summary of used and available space.
-- **Safe Cleanup**: One-tap removal of TeeVClean's own cache (internal, external, and code cache), with a clear report of how much space was freed.
+- **Cleanup**: One-tap removal of TeeVClean's own cache (internal, external, and code cache), with a clear report of how much space was freed.
 - **Junk Sweep**: Remove leftover temp, log, and thumbnail files plus empty folders from the folders you grant.
 - **Large File Review**: Scan folders you grant for oversized or stale files and delete them, with explicit per-file confirmation.
-- **Guided App Cache**: Deep-link into each app's storage page — the only store-legal way to clear another app's cache on modern Android.
-- **App Review**: Sort apps by size and quickly access system info for management.
+- **Guided App Cache**: Deep-link into each app's storage page - the only store-legal way to clear another app's cache on modern Android.
+- **Applications**: Sort apps by size and quickly access system info for management.
 - **Device Health**: Monitor network connectivity, system uptime, and hardware details.
 - **D-Pad Optimized**: Fully navigable via remote control with clear focus indicators.
 - **Privacy First**: No background deletions. Every action requires your explicit approval.
@@ -38,9 +38,9 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 graph TD
     A[Leanback Launcher] --> B[Overview Dashboard]
     B --> C[Sidebar Navigation]
-    C --> D[Safe Cleanup]
+    C --> D[Cleanup]
     C --> E[Large Files]
-    C --> F[App Review]
+    C --> F[Applications]
     C --> G[Device Health]
     
     D --> H{User Approval}
