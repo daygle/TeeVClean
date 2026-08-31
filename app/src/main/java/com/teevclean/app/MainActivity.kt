@@ -226,7 +226,8 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 } else {
                                     LargeFilesScreen(
                                         files = viewModel.largeFiles,
-                                        onPickFolder = onPickFolder,
+                                        filter = viewModel.fileFilter,
+                                        onUpdateFilter = { viewModel.updateFileFilter(it) },
                                         onDeleteMany = { selected -> viewModel.deleteFiles(selected) { result -> cleanupResult = result } },
                                     )
                                 }
@@ -411,26 +412,39 @@ private fun CleanupScreen(
 @Composable
 private fun LargeFilesScreen(
     files: List<FileSummary>,
-    onPickFolder: () -> Unit,
+    filter: FileFilter,
+    onUpdateFilter: (FileFilter) -> Unit,
     onDeleteMany: (List<FileSummary>) -> Unit,
 ) {
     var activeFilters by remember { mutableStateOf(setOf(0, 1, 2)) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var showConfirm by remember { mutableStateOf(false) }
+    var showFilterSettings by remember { mutableStateOf(false) }
 
-    val cutoff = remember { System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000 }
-    val largeBytes = 500L * 1024 * 1024
+    val cutoff = remember(filter.minAgeDays) { System.currentTimeMillis() - filter.minAgeDays.toLong() * 24 * 60 * 60 * 1000 }
+    val largeBytes = filter.minSize
 
-    val filteredFiles = remember(files, activeFilters) {
+    val filteredFiles = remember(files, activeFilters, filter) {
         files.filter { file ->
             (0 in activeFilters && file.size >= largeBytes) ||
             (1 in activeFilters && file.modified < cutoff) ||
-            (2 in activeFilters && FileClassifier.isInstaller(file.name))
+            (2 in activeFilters && filter.showInstallers && FileClassifier.isInstaller(file.name))
         }
     }
 
     val selectedFiles = filteredFiles.filter { it.uri in selected }
     val selectedBytes = selectedFiles.sumOf { it.size }
+
+    if (showFilterSettings) {
+        FilterDialog(
+            current = filter,
+            onDismiss = { showFilterSettings = false },
+            onSave = {
+                onUpdateFilter(it)
+                showFilterSettings = false
+            }
+        )
+    }
 
     if (showConfirm && selectedFiles.isNotEmpty()) {
         AlertDialog(
@@ -449,18 +463,28 @@ private fun LargeFilesScreen(
     }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
+            }
+            TvButton(onClick = { showFilterSettings = true }) {
+                Text(stringResource(R.string.filter_settings))
+            }
+        }
         
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            val filterOptions = listOf(
-                R.string.filter_over_500mb to 0,
-                R.string.filter_older_30days to 1,
-                R.string.filter_installers to 2
+            val filterOptions = mutableListOf(
+                (if (largeBytes >= 1024 * 1024 * 1024) "${largeBytes / (1024 * 1024 * 1024)} GB+" else "${largeBytes / (1024 * 1024)} MB+") to 0,
+                "${filter.minAgeDays} Days+" to 1
             )
-            filterOptions.forEach { (resId, index) ->
+            if (filter.showInstallers) {
+                filterOptions.add(stringResource(R.string.filter_installers) to 2)
+            }
+
+            filterOptions.forEach { (label, index) ->
                 SelectableChip(
-                    label = stringResource(resId),
+                    label = label,
                     selected = index in activeFilters,
                     onClick = {
                         activeFilters = if (index in activeFilters) activeFilters - index else activeFilters + index
@@ -492,7 +516,6 @@ private fun LargeFilesScreen(
                 }
             }
         }
-        TvButton(onClick = onPickFolder) { Text(stringResource(R.string.choose_folder_to_scan)) }
         Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 15.sp)
     }
 }
@@ -810,6 +833,59 @@ private fun SweepDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         title = { Text(stringResource(R.string.temp_and_logs)) },
         text = { Text(stringResource(R.string.confirm_sweep_desc)) },
         confirmButton = { TvButton(onClick = onConfirm) { Text(stringResource(R.string.action_sweep)) } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun FilterDialog(
+    current: FileFilter,
+    onDismiss: () -> Unit,
+    onSave: (FileFilter) -> Unit,
+) {
+    var filter by remember { mutableStateOf(current) }
+    val sizeOptions = listOf(
+        50L * 1024 * 1024 to stringResource(R.string.filter_size_unit_mb, 50),
+        100L * 1024 * 1024 to stringResource(R.string.filter_size_unit_mb, 100),
+        500L * 1024 * 1024 to stringResource(R.string.filter_size_unit_mb, 500),
+        1L * 1024 * 1024 * 1024 to stringResource(R.string.filter_size_unit_gb, 1),
+        2L * 1024 * 1024 * 1024 to stringResource(R.string.filter_size_unit_gb, 2)
+    )
+    val ageOptions = listOf(
+        7 to stringResource(R.string.filter_age_unit_days, 7),
+        14 to stringResource(R.string.filter_age_unit_days, 14),
+        30 to stringResource(R.string.filter_age_unit_days, 30),
+        90 to stringResource(R.string.filter_age_unit_days, 90)
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.filter_settings), color = Muted) },
+        text = {
+            Column {
+                Text(stringResource(R.string.filter_min_size), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    sizeOptions.forEach { (size, label) ->
+                        SelectableChip(label, filter.minSize == size) { filter = filter.copy(minSize = size) }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                Text(stringResource(R.string.filter_min_age), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ageOptions.forEach { (days, label) ->
+                        SelectableChip(label, filter.minAgeDays == days) { filter = filter.copy(minAgeDays = days) }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                SelectableChip(
+                    stringResource(R.string.filter_show_installers),
+                    selected = filter.showInstallers,
+                ) { filter = filter.copy(showInstallers = !filter.showInstallers) }
+            }
+        },
+        confirmButton = { TvButton(onClick = { onSave(filter) }) { Text(stringResource(R.string.save)) } },
         dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

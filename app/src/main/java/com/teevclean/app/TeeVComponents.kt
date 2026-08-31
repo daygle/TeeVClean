@@ -242,21 +242,21 @@ fun SelectableFileRow(title: String, subtitle: String, amount: String, selected:
                 } else false
             }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onToggle)
-            .padding(20.dp),
+            .padding(22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(if (selected) Lime else PanelLight),
+            Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) Lime else PanelLight),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) Text("✓", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            if (selected) Text("✓", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(18.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(subtitle, color = Muted, fontSize = 13.sp, maxLines = 1)
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(subtitle, color = Muted, fontSize = 15.sp, maxLines = 1)
         }
-        Text(amount, color = Lime, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(amount, color = Lime, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 

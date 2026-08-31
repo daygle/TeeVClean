@@ -137,6 +137,7 @@ class TeeVViewModel(
     var cleanupHistory by mutableStateOf(repository.getCleanupHistory())
     var storageBreakdown by mutableStateOf<StorageBreakdown?>(null)
     var isLoadingBreakdown by mutableStateOf(false)
+    var fileFilter by mutableStateOf(repository.getFileFilter())
 
     init {
         refreshData()
@@ -256,4 +257,10 @@ class TeeVViewModel(
     }
 
     fun hasFullStorageAccess(): Boolean = repository.hasFullStorageAccess()
+
+    fun updateFileFilter(filter: FileFilter) {
+        repository.setFileFilter(filter)
+        fileFilter = filter
+        refreshData()
+    }
 }

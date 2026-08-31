@@ -86,6 +86,12 @@ data class StorageBreakdown(
 /** Running totals for the cleanup-history card. */
 data class CleanupHistory(val lastRun: Long, val totalFreedBytes: Long, val totalItems: Int)
 
+data class FileFilter(
+    val minSize: Long = 500L * 1024 * 1024,
+    val minAgeDays: Int = 30,
+    val showInstallers: Boolean = true
+)
+
 /** Pure filename rules for cleanup, extracted so they can be unit-tested without Android. */
 object FileClassifier {
     /** Junk that is always safe to remove: temp/log/thumbnail files and abandoned partial downloads. */
@@ -217,8 +223,9 @@ class TeeVRepository(private val context: Context) {
     }
 
     suspend fun scanLargeFiles(): List<FileSummary> = withContext(Dispatchers.IO) {
-        val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
-        val largeFileBytes = 500L * 1024 * 1024
+        val filter = getFileFilter()
+        val cutoff = System.currentTimeMillis() - filter.minAgeDays.toLong() * 24 * 60 * 60 * 1000
+        val largeFileBytes = filter.minSize
 
         // Public storage roots read directly (works where the app has legacy/all-files access).
         val publicRoots = mutableListOf(
@@ -234,7 +241,7 @@ class TeeVRepository(private val context: Context) {
         val publicMatches = publicRoots.distinct().flatMap { root ->
             if (root.exists() && root.isDirectory) {
                 root.listFiles()
-                    ?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff || isInstaller(it.name)) }
+                    ?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff || (filter.showInstallers && isInstaller(it.name))) }
                     ?.map { FileSummary(it.name, it.parent.orEmpty(), it.length(), it.lastModified(), Uri.fromFile(it).toString()) }
                     .orEmpty()
             } else emptyList()
@@ -243,7 +250,7 @@ class TeeVRepository(private val context: Context) {
         // Folders the user granted through the Storage Access Framework; entries here are deletable.
         val safMatches = getCustomFolders().flatMap { uriString ->
             walkSafTree(uriString) { doc ->
-                doc.length() >= largeFileBytes || doc.lastModified() < cutoff || isInstaller(doc.name)
+                doc.length() >= largeFileBytes || doc.lastModified() < cutoff || (filter.showInstallers && isInstaller(doc.name))
             }
         }
 
@@ -539,6 +546,23 @@ class TeeVRepository(private val context: Context) {
         }
     }
 
+    fun getFileFilter(): FileFilter {
+        return FileFilter(
+            minSize = prefs?.getLong(KEY_MIN_FILE_SIZE, 500L * 1024 * 1024) ?: 500L * 1024 * 1024,
+            minAgeDays = prefs?.getInt(KEY_MIN_FILE_AGE, 30) ?: 30,
+            showInstallers = prefs?.getBoolean(KEY_SHOW_INSTALLERS, true) ?: true
+        )
+    }
+
+    fun setFileFilter(filter: FileFilter) {
+        prefs?.edit()?.apply {
+            putLong(KEY_MIN_FILE_SIZE, filter.minSize)
+            putInt(KEY_MIN_FILE_AGE, filter.minAgeDays)
+            putBoolean(KEY_SHOW_INSTALLERS, filter.showInstallers)
+            apply()
+        }
+    }
+
     private fun iterativeFolderSize(root: File): Long {
         if (!root.exists()) return 0L
         if (root.isFile) return root.length()
@@ -572,6 +596,9 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_LAST_RUN = "cleanup_last_run"
         private const val KEY_TOTAL_FREED = "cleanup_total_freed"
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
+        private const val KEY_MIN_FILE_SIZE = "min_file_size"
+        private const val KEY_MIN_FILE_AGE = "min_file_age"
+        private const val KEY_SHOW_INSTALLERS = "show_installers"
 
         /** Ignore files below this size when hunting duplicates - tiny files aren't worth the churn. */
         private const val MIN_DUPLICATE_BYTES = 1L * 1024 * 1024
