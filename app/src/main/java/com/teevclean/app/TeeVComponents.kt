@@ -355,7 +355,6 @@ fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () ->
 fun SettingsScreen(
     scheduleSummary: String,
     customFolders: List<String>,
-    history: CleanupHistory,
     hasUsageAccess: Boolean,
     hasStorageAccess: Boolean,
     appVersion: String,
@@ -465,33 +464,6 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
-        }
-        item {
-            val interactionSource = remember { MutableInteractionSource() }
-            val isFocused by interactionSource.collectIsFocusedAsState()
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Panel)
-                    .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(18.dp))
-                    .focusable(interactionSource = interactionSource)
-                    .padding(20.dp)
-            ) {
-                Text(stringResource(R.string.cleanup_history_label), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                val lastRun = if (history.lastRun == 0L) {
-                    stringResource(R.string.history_never)
-                } else {
-                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
-                }
-                Text(stringResource(R.string.history_last_run, lastRun), color = Color.White, fontSize = 15.sp)
-                Text(
-                    pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems),
-                    color = Muted,
-                    fontSize = 13.sp
-                )
             }
         }
         item {

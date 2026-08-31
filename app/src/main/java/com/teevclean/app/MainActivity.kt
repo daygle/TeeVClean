@@ -259,7 +259,6 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                             Screen.SETTINGS -> SettingsScreen(
                                 scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
                                 customFolders = viewModel.customFolders,
-                                history = viewModel.cleanupHistory,
                                 hasUsageAccess = hasUsageStatsPermission(context),
                                 hasStorageAccess = hasStorageAccessPermission(context, viewModel),
                                 appVersion = "1.0",
