@@ -19,6 +19,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,13 +88,18 @@ class MainActivity : ComponentActivity() {
             TeeVCleanApp(
                 viewModel,
                 onPickFolder = {
-                    try {
-                        folderPicker.launch(null)
-                    } catch (_: ActivityNotFoundException) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            openAllFilesAccessSettings()
-                        } else {
-                            storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                    if (viewModel.hasFullStorageAccess()) {
+                        Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
+                    } else {
+                        try {
+                            folderPicker.launch(null)
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                openAllFilesAccessSettings()
+                            } else {
+                                storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                            }
                         }
                     }
                 }
@@ -406,10 +415,22 @@ private fun LargeFilesScreen(
     onPickFolder: () -> Unit,
     onDeleteMany: (List<FileSummary>) -> Unit,
 ) {
+    var activeFilters by remember { mutableStateOf(setOf(0, 1, 2)) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var showConfirm by remember { mutableStateOf(false) }
-    // Drop selections whose files are no longer present (e.g. after a delete + rescan).
-    val selectedFiles = files.filter { it.uri in selected }
+
+    val cutoff = remember { System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000 }
+    val largeBytes = 500L * 1024 * 1024
+
+    val filteredFiles = remember(files, activeFilters) {
+        files.filter { file ->
+            (0 in activeFilters && file.size >= largeBytes) ||
+            (1 in activeFilters && file.modified < cutoff) ||
+            (2 in activeFilters && FileClassifier.isInstaller(file.name))
+        }
+    }
+
+    val selectedFiles = filteredFiles.filter { it.uri in selected }
     val selectedBytes = selectedFiles.sumOf { it.size }
 
     if (showConfirm && selectedFiles.isNotEmpty()) {
@@ -431,18 +452,32 @@ private fun LargeFilesScreen(
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
+        
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(stringResource(R.string.filter_over_500mb), stringResource(R.string.filter_older_30days), stringResource(R.string.filter_installers)).forEach {
-                Text(it, color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Lime).padding(horizontal = 18.dp, vertical = 10.dp))
+            val filterOptions = listOf(
+                R.string.filter_over_500mb to 0,
+                R.string.filter_older_30days to 1,
+                R.string.filter_installers to 2
+            )
+            filterOptions.forEach { (resId, index) ->
+                SelectableChip(
+                    label = stringResource(resId),
+                    selected = index in activeFilters,
+                    onClick = {
+                        activeFilters = if (index in activeFilters) activeFilters - index else activeFilters + index
+                    }
+                )
             }
         }
-        if (files.isEmpty()) {
+
+        if (filteredFiles.isEmpty()) {
+            Spacer(Modifier.height(20.dp))
             Text(stringResource(R.string.no_large_files), color = Muted, fontSize = 15.sp)
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TvTextButton(onClick = {
-                    selected = if (selected.size == files.size) emptySet() else files.asSequence().map { it.uri }.toSet()
-                }) { Text(if (selected.size == files.size) stringResource(R.string.clear_selection) else stringResource(R.string.select_all)) }
+                    selected = if (selected.size == filteredFiles.size) emptySet() else filteredFiles.asSequence().map { it.uri }.toSet()
+                }) { Text(if (selected.size == filteredFiles.size) stringResource(R.string.clear_selection) else stringResource(R.string.select_all)) }
                 Spacer(Modifier.weight(1f))
                 if (selectedFiles.isNotEmpty()) {
                     TvButton(onClick = { showConfirm = true }) {
@@ -451,7 +486,7 @@ private fun LargeFilesScreen(
                 }
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                items(files) { file ->
+                items(filteredFiles) { file ->
                     SelectableFileRow(file.name, file.path, formatBytes(file.size), file.uri in selected) {
                         selected = if (file.uri in selected) selected - file.uri else selected + file.uri
                     }
@@ -459,7 +494,7 @@ private fun LargeFilesScreen(
             }
         }
         TvButton(onClick = onPickFolder) { Text(stringResource(R.string.choose_folder_to_scan)) }
-        Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 13.sp)
+        Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 15.sp)
     }
 }
 
@@ -489,39 +524,58 @@ private fun ApplicationsScreen(
                 onClick = onEnableUsage,
             )
         }
-        if (rarelyUsed.isNotEmpty()) {
-            Spacer(Modifier.height(20.dp))
-            Text(stringResource(R.string.rarely_used_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            Text(stringResource(R.string.rarely_used_desc), color = Muted, fontSize = 13.sp)
-            Spacer(Modifier.height(10.dp))
-            rarelyUsed.take(6).forEach { app ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF2A211C)).padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(app.label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text(lastUsedText(app.lastUsed), color = Color(0xFFFFB74D), fontSize = 12.sp)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+            if (rarelyUsed.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(10.dp))
+                    Text(stringResource(R.string.rarely_used_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.rarely_used_desc), color = Muted, fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                }
+                items(rarelyUsed.take(6)) { app ->
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isFocused by interactionSource.collectIsFocusedAsState()
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isFocused) PanelLight else Color(0xFF2A211C))
+                            .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(16.dp))
+                            .focusable(interactionSource = interactionSource)
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(app.label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                            Text(lastUsedText(app.lastUsed), color = Color(0xFFFFB74D), fontSize = 14.sp)
+                        }
+                        Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(16.dp))
+                        TvButton(onClick = { onUninstall(app.packageName) }) { Text(stringResource(R.string.uninstall)) }
                     }
-                    Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(16.dp))
-                    TvButton(onClick = { onUninstall(app.packageName) }) { Text(stringResource(R.string.uninstall)) }
                 }
             }
-        }
-        Spacer(Modifier.height(20.dp))
-        Text(stringResource(R.string.all_apps_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(10.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                Spacer(Modifier.height(10.dp))
+                Text(stringResource(R.string.all_apps_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(10.dp))
+            }
             items(apps) { app ->
+                val interactionSource = remember { MutableInteractionSource() }
+                val isFocused by interactionSource.collectIsFocusedAsState()
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).padding(18.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (isFocused) PanelLight else Panel)
+                        .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(16.dp))
+                        .focusable(interactionSource = interactionSource)
+                        .padding(18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(app.label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${app.packageName} • ${lastUsedText(app.lastUsed)}", color = Muted, fontSize = 12.sp)
+                        Text(app.label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${app.packageName} • ${lastUsedText(app.lastUsed)}", color = Muted, fontSize = 14.sp)
                     }
                     Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(16.dp))
@@ -708,9 +762,9 @@ private fun ScheduleDialog(
         title = { Text(stringResource(R.string.schedule_title), color = Muted) },
         text = {
             Column {
-                Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 14.sp)
+                Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 15.sp)
                 Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SelectableChip(stringResource(R.string.freq_off), frequency == CleanupFrequency.OFF) { frequency = CleanupFrequency.OFF }
@@ -719,9 +773,9 @@ private fun ScheduleDialog(
                     SelectableChip(stringResource(R.string.freq_monthly), frequency == CleanupFrequency.MONTHLY) { frequency = CleanupFrequency.MONTHLY }
                 }
                 Spacer(Modifier.height(18.dp))
-                Text(stringResource(R.string.schedule_items_label), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.schedule_items_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.schedule_clean_own_cache), color = Muted, fontSize = 13.sp)
+                Text(stringResource(R.string.schedule_clean_own_cache), color = Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(10.dp))
                 SelectableChip(
                     stringResource(R.string.schedule_clean_sweep),
@@ -730,7 +784,7 @@ private fun ScheduleDialog(
                 ) { sweep = !sweep }
                 if (!hasFolders) {
                     Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 12.sp)
+                    Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 14.sp)
                 }
             }
         },

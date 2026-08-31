@@ -127,8 +127,9 @@
     <string name="cleanup_complete">Clean-up Complete</string>
     <string name="cleanup_nothing">Everything was already clean - nothing to remove.</string>
     <string name="done">Done</string>
-    <string name="feature_not_supported">This feature is not supported on your device (system component missing).</string>
-    <string name="feature_not_supported_folder">Folder selection is not available on this device. Please add folders from the Settings screen.</string>
+    <string name="feature_not_supported">System file picker missing. Opening settings to allow a full drive scan instead.</string>
+    <string name="feature_not_supported_folder">Full drive access is already granted. You can scan everything from the main screen.</string>
+    <string name="storage_full_access_granted">Full storage access already enabled.</string>
     <plurals name="cleanup_freed">
         <item quantity="one">Freed %1$s across %2$d item.</item>
         <item quantity="other">Freed %1$s across %2$d items.</item>

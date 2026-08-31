@@ -70,7 +70,7 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
             .forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect)
-        Text(stringResource(R.string.version_footer, "1.0"), color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
+        Text(stringResource(R.string.version_footer, "1.0"), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
     }
 }
 
@@ -146,10 +146,10 @@ fun ResultRow(title: String, subtitle: String, amount: String, safe: Boolean) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 14.sp)
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 15.sp)
         }
-        Text(amount, color = if (safe) Lime else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(amount, color = if (safe) Lime else Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -178,10 +178,10 @@ fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 14.sp)
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 15.sp)
         }
-        Text(action, color = Lime, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(action, color = Lime, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(14.dp))
         Text("›", color = Muted, fontSize = 26.sp)
     }
@@ -296,7 +296,27 @@ fun FeatureCard(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = title, tint = Lime, modifier = Modifier.size(22.dp)) }; Spacer(Modifier.width(18.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(subtitle, color = Muted, fontSize = 13.sp) }; Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.width(22.dp)); Text("›", color = Muted, fontSize = 28.sp)
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = title, tint = Lime, modifier = Modifier.size(22.dp)) }
+        Spacer(Modifier.width(18.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                if (badge.isNotEmpty()) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        badge.uppercase(),
+                        color = Ink,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Lime).padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            Text(subtitle, color = Muted, fontSize = 14.sp)
+        }
+        Text(amount, color = Lime, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(22.dp))
+        Text("›", color = Muted, fontSize = 28.sp)
     }
 }
 
@@ -325,7 +345,7 @@ fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () ->
                 text = stringResource(R.string.history_last_run, lastRun) + "  •  " + 
                     pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems),
                 color = Muted,
-                fontSize = 13.sp
+                fontSize = 14.sp
             )
         }
     }
