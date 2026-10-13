@@ -9,7 +9,10 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,6 +43,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.net.URLDecoder
@@ -57,13 +63,13 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
             Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Text("✓", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.height(62.dp))
+        Spacer(Modifier.height(32.dp))
         Screen.entries
             .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN }
             .forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect)
-        Text(stringResource(R.string.version_footer, BuildConfig.VERSION_NAME), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
+        Text(stringResource(R.string.version_footer, BuildConfig.VERSION_NAME), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
     }
 }
 
@@ -210,7 +216,7 @@ fun SelectableFileRow(title: String, subtitle: String, amount: String, selected:
                 RoundedCornerShape(18.dp),
             )
             .clickable(interactionSource = interactionSource, indication = null, onClick = onToggle)
-            .padding(22.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -221,8 +227,8 @@ fun SelectableFileRow(title: String, subtitle: String, amount: String, selected:
         }
         Spacer(Modifier.width(18.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(subtitle, color = Muted, fontSize = 15.sp, maxLines = 1)
+            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(amount, color = Lime, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
@@ -326,125 +332,163 @@ fun SettingsScreen(
     onAddFolder: () -> Unit,
     onRemoveFolder: (String) -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        item {
-            Text(stringResource(R.string.settings), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp))
-        }
-        item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
-                Text(stringResource(R.string.settings_cleanup_schedule), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(scheduleSummary, color = Muted, modifier = Modifier.weight(1f))
-                    TvButton(onClick = onEditSchedule) {
-                        Text(stringResource(R.string.schedule_change))
-                    }
-                }
-            }
-        }
-        item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
-                Text(stringResource(R.string.settings_permissions), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.settings_usage_access), color = Color.White, fontSize = 15.sp)
-                        Text(
-                            if (hasUsageAccess) stringResource(R.string.settings_usage_access_granted)
-                            else stringResource(R.string.settings_usage_access_denied),
-                            color = if (hasUsageAccess) Lime else Color(0xFFFFB74D),
-                            fontSize = 13.sp
-                        )
-                    }
-                    TvButton(onClick = onEnableUsage) {
-                        Text(if (hasUsageAccess) stringResource(R.string.action_open) else stringResource(R.string.enable))
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.settings_usage_access_desc), color = Muted, fontSize = 13.sp)
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.settings_storage_access), color = Color.White, fontSize = 15.sp)
-                        Text(
-                            if (hasStorageAccess) stringResource(R.string.settings_storage_access_granted)
-                            else stringResource(R.string.settings_storage_access_denied),
-                            color = if (hasStorageAccess) Lime else Color(0xFFFFB74D),
-                            fontSize = 13.sp
-                        )
-                    }
-                    TvButton(onClick = onEnableStorage) {
-                        Text(stringResource(R.string.action_open))
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.settings_storage_access_desc), color = Muted, fontSize = 13.sp)
-            }
-        }
-        item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.settings_scanned_folders_desc), color = Muted, fontSize = 13.sp)
-                    }
-                    TvButton(onClick = onAddFolder) {
-                        Text(stringResource(R.string.add_folder))
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                if (customFolders.isEmpty()) {
-                    Text(stringResource(R.string.settings_no_folders), color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-                } else {
-                    customFolders.forEach { folder -> key(folder) {
-                        val displayName = folderDisplayName(folder)
-                        val interactionSource = remember { MutableInteractionSource() }
-                        val isFocused by interactionSource.collectIsFocusedAsState()
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isFocused) PanelLight else Color.Transparent)
-                                .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(12.dp))
-                                .clickable(interactionSource = interactionSource, indication = null) {
-                                    onRemoveFolder(folder)
-                                }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text("📁 $displayName", color = if (isFocused) Color.White else Muted, modifier = Modifier.weight(1f), maxLines = 1)
-                            Text(stringResource(R.string.remove_folder), color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    ScreenScaffold(stringResource(R.string.settings)) {
+        ScreenList(spacing = 18.dp) {
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                    Text(stringResource(R.string.settings_cleanup_schedule), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(scheduleSummary, color = Muted, modifier = Modifier.weight(1f))
+                        TvButton(onClick = onEditSchedule) {
+                            Text(stringResource(R.string.schedule_change))
                         }
-                    } }
+                    }
                 }
             }
-        }
-        item {
-            val interactionSource = remember { MutableInteractionSource() }
-            val isFocused by interactionSource.collectIsFocusedAsState()
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Panel)
-                    .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(18.dp))
-                    .focusable(interactionSource = interactionSource)
-                    .padding(20.dp)
-            ) {
-                Text(stringResource(R.string.settings_about), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.about_version, appVersion), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.settings_privacy_policy), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.privacy_desc), color = Muted, fontSize = 13.sp)
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                    Text(stringResource(R.string.settings_permissions), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_usage_access), color = Color.White, fontSize = 15.sp)
+                            Text(
+                                if (hasUsageAccess) stringResource(R.string.settings_usage_access_granted)
+                                else stringResource(R.string.settings_usage_access_denied),
+                                color = if (hasUsageAccess) Lime else Color(0xFFFFB74D),
+                                fontSize = 13.sp
+                            )
+                        }
+                        TvButton(onClick = onEnableUsage) {
+                            Text(if (hasUsageAccess) stringResource(R.string.action_open) else stringResource(R.string.enable))
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_usage_access_desc), color = Muted, fontSize = 13.sp)
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_storage_access), color = Color.White, fontSize = 15.sp)
+                            Text(
+                                if (hasStorageAccess) stringResource(R.string.settings_storage_access_granted)
+                                else stringResource(R.string.settings_storage_access_denied),
+                                color = if (hasStorageAccess) Lime else Color(0xFFFFB74D),
+                                fontSize = 13.sp
+                            )
+                        }
+                        TvButton(onClick = onEnableStorage) {
+                            Text(stringResource(R.string.action_open))
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_storage_access_desc), color = Muted, fontSize = 13.sp)
+                }
+            }
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_scanned_folders), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(4.dp))
+                            Text(stringResource(R.string.settings_scanned_folders_desc), color = Muted, fontSize = 13.sp)
+                        }
+                        TvButton(onClick = onAddFolder) {
+                            Text(stringResource(R.string.add_folder))
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    if (customFolders.isEmpty()) {
+                        Text(stringResource(R.string.settings_no_folders), color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+                    } else {
+                        customFolders.forEach { folder -> key(folder) {
+                            val displayName = folderDisplayName(folder)
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isFocused by interactionSource.collectIsFocusedAsState()
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isFocused) PanelLight else Color.Transparent)
+                                    .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .clickable(interactionSource = interactionSource, indication = null) {
+                                        onRemoveFolder(folder)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text("📁 $displayName", color = if (isFocused) Color.White else Muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(stringResource(R.string.remove_folder), color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } }
+                    }
+                }
+            }
+            item {
+                val interactionSource = remember { MutableInteractionSource() }
+                val isFocused by interactionSource.collectIsFocusedAsState()
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Panel)
+                        .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(18.dp))
+                        .focusable(interactionSource = interactionSource)
+                        .padding(20.dp)
+                ) {
+                    Text(stringResource(R.string.settings_about), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.about_version, appVersion), color = Muted, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_privacy_policy), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(stringResource(R.string.privacy_desc), color = Muted, fontSize = 13.sp)
+                }
             }
         }
     }
+}
+
+/**
+ * Common frame for every screen: a fixed title bar (with optional [actions] on the right) above
+ * [content]. The title stays outside the scrolling list, so it remains visible however far D-pad
+ * focus scrolls the list, and every screen starts at the same top edge.
+ */
+@Composable
+fun ScreenScaffold(
+    title: String,
+    description: String? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                Text(title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (description != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(description, color = Muted, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+        }
+        Spacer(Modifier.height(18.dp))
+        content()
+    }
+}
+
+/** The scrolling body of a [ScreenScaffold]; takes all the height left under the title bar. */
+@Composable
+fun ColumnScope.ScreenList(spacing: Dp = 12.dp, content: LazyListScope.() -> Unit) {
+    LazyColumn(
+        Modifier.weight(1f).fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(spacing),
+        // Room below the last row so its focus border isn't flush with the screen's safe edge.
+        contentPadding = PaddingValues(bottom = 8.dp),
+        content = content,
+    )
 }
 
 /**
@@ -464,8 +508,8 @@ internal fun folderDisplayName(treeUri: String): String {
 }
 
 @Composable
-fun LoadingOverlay() {
-    Box(Modifier.fillMaxWidth().height(4.dp)) {
+fun LoadingOverlay(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().height(4.dp)) {
         LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Color.Transparent)
     }
 }
