@@ -23,6 +23,7 @@ import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
@@ -56,10 +57,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -71,6 +77,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.concurrent.TimeUnit
 
@@ -195,6 +202,19 @@ fun TeeVCleanApp(
     val context = LocalContext.current
     var lastBackPress by remember { mutableLongStateOf(0L) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val contentFocus = remember { FocusRequester() }
+    // Whether D-pad focus was last in the content pane (rather than the sidebar).
+    val focusWasInContent = remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // When the focused item disappears (a card that opened another screen, Back, a deleted
+    // row), Compose drops focus and the next D-pad press would jump to the top-left menu item.
+    // Put focus back into the content instead, once the new content is laid out.
+    val restoreContentFocus = {
+        scope.launch {
+            withFrameNanos { }
+            contentFocus.tryRequestFocus()
+        }
+    }
 
     // Fires on first composition too, which performs the initial load.
     DisposableEffect(lifecycleOwner) {
@@ -258,10 +278,23 @@ fun TeeVCleanApp(
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Ink) {
             // Android TV safe area: 48dp left/right and 27dp top/bottom stay clear of overscan.
-            Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
-                Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 48.dp, vertical = 27.dp)
+                    .onFocusChanged { if (!it.hasFocus && focusWasInContent.value) restoreContentFocus() }
+            ) {
+                Box(Modifier.onFocusChanged { if (it.hasFocus) focusWasInContent.value = false }) {
+                    Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
+                }
                 Spacer(Modifier.width(32.dp))
-                Box(Modifier.weight(1f)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .onFocusChanged { if (it.hasFocus) focusWasInContent.value = true }
+                        .focusRequester(contentFocus)
+                        .focusGroup()
+                ) {
                     when (viewModel.currentScreen) {
                         Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, viewModel.cleanupHistory, { showCleanup = true }) { viewModel.currentScreen = it }
                         Screen.CLEAN -> CleanupScreen(
@@ -516,7 +549,7 @@ private fun LargeFilesScreen(
                     showConfirm = false
                 }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TvTextButton(onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
@@ -704,7 +737,7 @@ private fun DuplicatesScreen(
                     pending = null
                 }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TvTextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
@@ -880,7 +913,7 @@ private fun ScheduleDialog(
             }
         },
         confirmButton = { TvButton(onClick = { onSave(frequency, sweep && hasFolders) }) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -891,7 +924,7 @@ private fun CleanupDialog(cacheSize: Long, onDismiss: () -> Unit, onCleaned: () 
         title = { Text(stringResource(R.string.confirm_cleanup)) },
         text = { Text(stringResource(R.string.confirm_cleanup_desc, formatBytes(cacheSize))) },
         confirmButton = { TvButton(onClick = onCleaned) { Text(stringResource(R.string.remove_cache)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -902,7 +935,7 @@ private fun SweepDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         title = { Text(stringResource(R.string.temp_and_logs)) },
         text = { Text(stringResource(R.string.confirm_sweep_desc)) },
         confirmButton = { TvButton(onClick = onConfirm) { Text(stringResource(R.string.action_sweep)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -955,7 +988,7 @@ private fun FilterDialog(
             }
         },
         confirmButton = { TvButton(onClick = { onSave(filter) }) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -971,7 +1004,7 @@ private fun CleanupResultDialog(result: CleanupResult, onDismiss: () -> Unit) {
                 Text(pluralStringResource(R.plurals.cleanup_freed, result.itemsRemoved, formatBytes(result.freedBytes), result.itemsRemoved))
             }
         },
-        confirmButton = { TvButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
+        confirmButton = { TvButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.done)) } },
     )
 }
 

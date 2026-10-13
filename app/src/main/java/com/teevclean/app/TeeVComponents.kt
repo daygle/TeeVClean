@@ -3,6 +3,7 @@ package com.teevclean.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -32,11 +33,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
@@ -58,7 +65,27 @@ val Muted = Color(0xFF9BA79C)
 
 @Composable
 fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
-    Column(Modifier.width(210.dp).fillMaxHeight()) {
+    val selectedFocus = remember { FocusRequester() }
+    // Sub-screens without their own menu item land focus on the item they are reached from.
+    val focusTarget = when (selected) {
+        Screen.DUPLICATES -> Screen.CLEAN
+        Screen.BREAKDOWN -> Screen.OVERVIEW
+        else -> selected
+    }
+    val focusInside = remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .width(210.dp)
+            .fillMaxHeight()
+            .onFocusChanged { state ->
+                val entering = state.hasFocus && !focusInside.value
+                focusInside.value = state.hasFocus
+                // D-pad Left from the content lands on the current screen's item rather than
+                // whichever item happens to be nearest.
+                if (entering) selectedFocus.tryRequestFocus()
+            }
+            .focusGroup()
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) { Text("✓", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.width(12.dp)); Text("TeeV", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Clean", color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -66,21 +93,22 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
         Spacer(Modifier.height(32.dp))
         Screen.entries
             .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN }
-            .forEach { screen -> NavItem(screen, selected, onSelect) }
+            .forEach { screen -> NavItem(screen, selected, onSelect, selectedFocus.takeIf { screen == focusTarget }) }
         Spacer(Modifier.weight(1f))
-        NavItem(Screen.SETTINGS, selected, onSelect)
+        NavItem(Screen.SETTINGS, selected, onSelect, selectedFocus.takeIf { focusTarget == Screen.SETTINGS })
         Text(stringResource(R.string.version_footer, BuildConfig.VERSION_NAME), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
     }
 }
 
 @Composable
-fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
+fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit, focusRequester: FocusRequester? = null) {
     val active = screen == selected
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     Row(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .fillMaxWidth()
             .padding(vertical = 5.dp)
             .clip(RoundedCornerShape(14.dp))
@@ -449,6 +477,33 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+/**
+ * Requests focus, ignoring the cases where Compose can't grant it yet (requester not attached,
+ * nothing focusable inside). Losing focus on a TV is recoverable; crashing is not.
+ */
+fun FocusRequester.tryRequestFocus() {
+    try {
+        requestFocus()
+    } catch (_: IllegalStateException) {
+        // Not attached to a focus target yet.
+    }
+}
+
+/**
+ * A [FocusRequester] that takes focus once its target is laid out. Dialogs open with nothing
+ * focused on a TV, so without this the first OK press does nothing; put it on the safe choice
+ * (Cancel on destructive dialogs) so a stray press can't delete anything.
+ */
+@Composable
+fun rememberInitialFocus(): FocusRequester {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(requester) {
+        withFrameNanos { }
+        requester.tryRequestFocus()
+    }
+    return requester
 }
 
 /**
