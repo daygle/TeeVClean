@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
@@ -124,121 +125,142 @@ class TeeVViewModel(
 
     var currentScreen by mutableStateOf(Screen.OVERVIEW)
     var storageSummary by mutableStateOf(StorageSummary(0, 0))
+        private set
     var apps by mutableStateOf(emptyList<AppSummary>())
+        private set
     var largeFiles by mutableStateOf(emptyList<FileSummary>())
+        private set
     var customFolders by mutableStateOf(repository.getCustomFolders())
+        private set
     var cleanupFrequency by mutableStateOf(repository.getCleanupFrequency())
+        private set
     var scheduleSweepEnabled by mutableStateOf(repository.isScheduledSweepEnabled())
+        private set
     var cacheSize by mutableLongStateOf(0L)
+        private set
     var isRefreshing by mutableStateOf(false)
-    var lastCleanupResult by mutableStateOf<CleanupResult?>(null)
+        private set
     var duplicateGroups by mutableStateOf(emptyList<DuplicateGroup>())
+        private set
     var isScanningDuplicates by mutableStateOf(false)
+        private set
     var cleanupHistory by mutableStateOf(repository.getCleanupHistory())
+        private set
     var storageBreakdown by mutableStateOf<StorageBreakdown?>(null)
+        private set
     var isLoadingBreakdown by mutableStateOf(false)
+        private set
     var fileFilter by mutableStateOf(repository.getFileFilter())
+        private set
 
-    init {
-        refreshData()
-    }
+    private var refreshJob: Job? = null
 
+    /**
+     * Reloads everything shown on screen. The UI calls this on every resume (which includes
+     * first launch), so a newer refresh supersedes one still in flight instead of racing it.
+     */
     fun refreshData() {
-        viewModelScope.launch {
-            isRefreshing = true
-            val storageDeferred = async { repository.readStorage() }
-            val appsDeferred = async { repository.loadApps() }
-            val filesDeferred = async { repository.scanLargeFiles() }
-            val cacheDeferred = async { repository.getCacheSize() }
-            val historyDeferred = async { repository.getCleanupHistory() }
+        refreshJob?.cancel()
+        isRefreshing = true
+        refreshJob = viewModelScope.launch {
+            try {
+                val storageDeferred = async { repository.readStorage() }
+                val appsDeferred = async { repository.loadApps() }
+                val filesDeferred = async { repository.scanLargeFiles() }
+                val cacheDeferred = async { repository.getCacheSize() }
 
-            storageSummary = storageDeferred.await()
-            apps = appsDeferred.await()
-            largeFiles = filesDeferred.await()
-            cacheSize = cacheDeferred.await()
-            cleanupHistory = historyDeferred.await()
-
-            cleanupFrequency = repository.getCleanupFrequency()
-            scheduleSweepEnabled = repository.isScheduledSweepEnabled()
-            customFolders = repository.getCustomFolders()
-            isRefreshing = false
+                storageSummary = storageDeferred.await()
+                apps = appsDeferred.await()
+                largeFiles = filesDeferred.await()
+                cacheSize = cacheDeferred.await()
+                cleanupHistory = repository.getCleanupHistory()
+                cleanupFrequency = repository.getCleanupFrequency()
+                scheduleSweepEnabled = repository.isScheduledSweepEnabled()
+                customFolders = repository.getCustomFolders()
+            } finally {
+                // A superseded refresh must not clear the flag while its replacement is running.
+                if (refreshJob === coroutineContext[Job]) isRefreshing = false
+            }
         }
     }
 
     fun loadBreakdown() {
+        if (isLoadingBreakdown) return
+        isLoadingBreakdown = true
         viewModelScope.launch {
-            isLoadingBreakdown = true
-            storageBreakdown = repository.storageBreakdown()
-            isLoadingBreakdown = false
+            try {
+                storageBreakdown = repository.storageBreakdown()
+            } finally {
+                isLoadingBreakdown = false
+            }
         }
     }
 
-    fun addCustomFolder(uri: android.net.Uri) {
-        viewModelScope.launch {
-            repository.addCustomFolder(uri.toString())
-            refreshData()
-        }
+    fun addCustomFolder(uri: String) {
+        repository.addCustomFolder(uri)
+        invalidateDuplicates()
+        refreshData()
     }
 
-    fun removeCustomFolder(path: String) {
-        viewModelScope.launch {
-            repository.removeCustomFolder(path)
-            refreshData()
-        }
+    fun removeCustomFolder(uri: String) {
+        repository.removeCustomFolder(uri)
+        invalidateDuplicates()
+        refreshData()
     }
 
     fun clearCache(onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.clearOwnCache()
-            lastCleanupResult = result
             refreshData()
             onComplete(result)
-        }
-    }
-
-    fun deleteLargeFile(uri: String, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
-            repository.deleteFile(uri)
-            refreshData()
-            onComplete()
         }
     }
 
     fun deleteFiles(files: List<FileSummary>, onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.deleteFiles(files)
-            lastCleanupResult = result
+            invalidateDuplicates()
             refreshData()
             onComplete(result)
         }
     }
 
     fun findDuplicates() {
+        if (isScanningDuplicates) return
+        isScanningDuplicates = true
         viewModelScope.launch {
-            isScanningDuplicates = true
-            duplicateGroups = repository.scanDuplicates()
-            isScanningDuplicates = false
+            try {
+                duplicateGroups = repository.scanDuplicates()
+            } finally {
+                isScanningDuplicates = false
+            }
         }
     }
 
     fun deleteDuplicates(files: List<FileSummary>, onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.deleteFiles(files)
-            lastCleanupResult = result
-            duplicateGroups = repository.scanDuplicates()
+            invalidateDuplicates()
+            findDuplicates()
             refreshData()
             onComplete(result)
         }
     }
 
-    fun uninstallApp(packageName: String) {
-        repository.uninstallApp(packageName)
+    /**
+     * Drops duplicate groups that may no longer match the disk. A stale group is dangerous:
+     * if its kept copy was deleted elsewhere, "delete extras" would remove the last copy.
+     */
+    private fun invalidateDuplicates() {
+        duplicateGroups = emptyList()
     }
+
+    fun uninstallApp(packageName: String) = repository.uninstallApp(packageName)
 
     fun sweepJunk(onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.sweepJunk()
-            lastCleanupResult = result
+            invalidateDuplicates()
             refreshData()
             onComplete(result)
         }
@@ -252,9 +274,7 @@ class TeeVViewModel(
         scheduleSweepEnabled = repository.isScheduledSweepEnabled()
     }
 
-    fun openAppInfo(packageName: String) {
-        repository.openAppInfo(packageName)
-    }
+    fun openAppInfo(packageName: String) = repository.openAppInfo(packageName)
 
     fun hasFullStorageAccess(): Boolean = repository.hasFullStorageAccess()
 

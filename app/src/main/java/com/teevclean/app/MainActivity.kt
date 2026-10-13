@@ -1,20 +1,20 @@
 package com.teevclean.app
 
+import android.app.AppOpsManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
-import android.app.AppOpsManager
-import androidx.activity.compose.BackHandler
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
+import android.os.Process
 import android.os.SystemClock
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -32,19 +32,18 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -56,24 +55,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.text.DateFormat
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
     private val viewModel: TeeVViewModel by viewModels()
 
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let {
+        if (uri == null) return@registerForActivityResult
+        try {
             contentResolver.takePersistableUriPermission(
-                it,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
-            viewModel.addCustomFolder(it)
+        } catch (_: SecurityException) {
+            // Some pickers don't offer a persistable grant; the folder would stop working after a restart.
+            Toast.makeText(this, R.string.folder_grant_failed, Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
         }
+        viewModel.addCustomFolder(uri.toString())
     }
 
     private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -87,30 +96,36 @@ class MainActivity : ComponentActivity() {
         setContent {
             TeeVCleanApp(
                 viewModel,
-                onPickFolder = {
+                onRequestStorageAccess = {
                     if (viewModel.hasFullStorageAccess()) {
                         Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
                     } else {
-                        try {
-                            folderPicker.launch(null)
-                        } catch (_: ActivityNotFoundException) {
-                            Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                openAllFilesAccessSettings()
-                            } else {
-                                storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                            }
-                        }
+                        pickFolder()
                     }
-                }
+                },
+                // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
+                onAddFolder = ::pickFolder,
             )
+        }
+    }
+
+    private fun pickFolder() {
+        try {
+            folderPicker.launch(null)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                openAllFilesAccessSettings()
+            } else {
+                storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
     }
 
     private fun openAllFilesAccessSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                data = android.net.Uri.parse("package:$packageName")
+                data = "package:$packageName".toUri()
             }
             try {
                 startActivity(intent)
@@ -118,7 +133,7 @@ class MainActivity : ComponentActivity() {
                 val genericIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                 try {
                     startActivity(genericIntent)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
                 }
             }
@@ -127,7 +142,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
+fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, onAddFolder: () -> Unit) {
     var showCleanup by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showSweep by remember { mutableStateOf(false) }
@@ -136,7 +151,8 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
     var lastBackPress by remember { mutableLongStateOf(0L) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+    // Fires on first composition too, which performs the initial load.
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshData()
@@ -152,12 +168,12 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
         if (viewModel.currentScreen != Screen.OVERVIEW) {
             viewModel.currentScreen = Screen.OVERVIEW
         } else {
-            val now = System.currentTimeMillis()
-            if (now - lastBackPress < 2000) {
+            val now = SystemClock.elapsedRealtime()
+            if (lastBackPress != 0L && now - lastBackPress < 2000) {
                 (context as? android.app.Activity)?.finish()
             } else {
                 lastBackPress = now
-                android.widget.Toast.makeText(context, R.string.back_to_exit, android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, R.string.back_to_exit, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -196,10 +212,8 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Ink) {
-            Column {
-                if (viewModel.isRefreshing) {
-                    LoadingOverlay()
-                }
+            // The progress bar overlays the top edge so content doesn't shift while refreshing.
+            Box {
                 Row(Modifier.fillMaxSize().padding(44.dp)) {
                     Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
                     Spacer(Modifier.width(38.dp))
@@ -219,7 +233,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                     PermissionRationale(
                                         stringResource(R.string.large_files),
                                         stringResource(R.string.storage_access_rationale),
-                                        onPickFolder,
+                                        onRequestStorageAccess,
                                         fallbackLabel = stringResource(R.string.settings),
                                         onFallback = { viewModel.currentScreen = Screen.SETTINGS }
                                     )
@@ -235,13 +249,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                             Screen.APPS -> ApplicationsScreen(
                                 apps = viewModel.apps,
                                 hasUsageAccess = hasUsageStatsPermission(context),
-                                onEnableUsage = {
-                                    try {
-                                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                                    } catch (_: ActivityNotFoundException) {
-                                        Toast.makeText(context, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
-                                    }
-                                },
+                                onEnableUsage = { openUsageAccessSettings(context) },
                                 onOpenInfo = { viewModel.openAppInfo(it) },
                                 onUninstall = { viewModel.uninstallApp(it) },
                             )
@@ -262,20 +270,18 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onPickFolder: () -> Unit) {
                                 customFolders = viewModel.customFolders,
                                 hasUsageAccess = hasUsageStatsPermission(context),
                                 hasStorageAccess = hasStorageAccessPermission(context, viewModel),
-                                appVersion = "1.0",
+                                appVersion = BuildConfig.VERSION_NAME,
                                 onEditSchedule = { showSchedule = true },
-                                onEnableUsage = {
-                                    try {
-                                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                                    } catch (_: ActivityNotFoundException) {
-                                        Toast.makeText(context, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
-                                    }
-                                },
-                                onEnableStorage = onPickFolder,
+                                onEnableUsage = { openUsageAccessSettings(context) },
+                                onEnableStorage = onRequestStorageAccess,
+                                onAddFolder = onAddFolder,
                                 onRemoveFolder = { viewModel.removeCustomFolder(it) },
                             )
                         }
                     }
+                }
+                if (viewModel.isRefreshing) {
+                    LoadingOverlay()
                 }
             }
         }
@@ -299,7 +305,7 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                 stringResource(R.string.storage_breakdown_desc),
                 "Storage",
                 "View",
-Screen.BREAKDOWN.icon
+                Screen.BREAKDOWN.icon
             ) { onNavigate(Screen.BREAKDOWN) }
         }
         item {
@@ -308,7 +314,7 @@ Screen.BREAKDOWN.icon
                 stringResource(R.string.feature_large_files_desc),
                 "Files",
                 if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size }),
-Screen.LARGE.icon
+                Screen.LARGE.icon
             ) { onNavigate(Screen.LARGE) }
         }
         item {
@@ -317,7 +323,7 @@ Screen.LARGE.icon
                 pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size),
                 "Apps",
                 "Guided",
-Screen.APPS.icon
+                Screen.APPS.icon
             ) { onNavigate(Screen.APPS) }
         }
         item {
@@ -326,7 +332,7 @@ Screen.APPS.icon
                 stringResource(R.string.feature_device_health_desc),
                 "Health",
                 "Check",
-Screen.HEALTH.icon
+                Screen.HEALTH.icon
             ) { onNavigate(Screen.HEALTH) }
         }
         item {
@@ -421,19 +427,21 @@ private fun LargeFilesScreen(
     var showConfirm by remember { mutableStateOf(false) }
     var showFilterSettings by remember { mutableStateOf(false) }
 
-    val cutoff = remember(filter.minAgeDays) { System.currentTimeMillis() - filter.minAgeDays.toLong() * 24 * 60 * 60 * 1000 }
     val largeBytes = filter.minSize
 
     val filteredFiles = remember(files, activeFilters, filter) {
+        val now = System.currentTimeMillis()
         files.filter { file ->
-            (0 in activeFilters && file.size >= largeBytes) ||
-            (1 in activeFilters && file.modified < cutoff) ||
-            (2 in activeFilters && filter.showInstallers && FileClassifier.isInstaller(file.name))
+            (0 in activeFilters && filter.isLarge(file.size)) ||
+                (1 in activeFilters && filter.isOld(file.modified, now)) ||
+                (2 in activeFilters && filter.isListedInstaller(file.name))
         }
     }
 
+    // Selection outside the current chips is ignored, so hidden files are never deleted.
     val selectedFiles = filteredFiles.filter { it.uri in selected }
     val selectedBytes = selectedFiles.sumOf { it.size }
+    val allSelected = selectedFiles.size == filteredFiles.size
 
     if (showFilterSettings) {
         FilterDialog(
@@ -472,7 +480,7 @@ private fun LargeFilesScreen(
                 Text(stringResource(R.string.filter_settings))
             }
         }
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val filterOptions = mutableListOf(
                 (if (largeBytes >= 1024 * 1024 * 1024) "${largeBytes / (1024 * 1024 * 1024)} GB+" else "${largeBytes / (1024 * 1024)} MB+") to 0,
@@ -499,8 +507,8 @@ private fun LargeFilesScreen(
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TvTextButton(onClick = {
-                    selected = if (selected.size == filteredFiles.size) emptySet() else filteredFiles.asSequence().map { it.uri }.toSet()
-                }) { Text(if (selected.size == filteredFiles.size) stringResource(R.string.clear_selection) else stringResource(R.string.select_all)) }
+                    selected = if (allSelected) emptySet() else filteredFiles.mapTo(mutableSetOf()) { it.uri }
+                }) { Text(stringResource(if (allSelected) R.string.clear_selection else R.string.select_all)) }
                 Spacer(Modifier.weight(1f))
                 if (selectedFiles.isNotEmpty()) {
                     TvButton(onClick = { showConfirm = true }) {
@@ -509,7 +517,7 @@ private fun LargeFilesScreen(
                 }
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                items(filteredFiles) { file ->
+                items(filteredFiles, key = { it.uri }) { file ->
                     SelectableFileRow(file.name, file.path, formatBytes(file.size), file.uri in selected) {
                         selected = if (file.uri in selected) selected - file.uri else selected + file.uri
                     }
@@ -528,8 +536,10 @@ private fun ApplicationsScreen(
     onOpenInfo: (String) -> Unit,
     onUninstall: (String) -> Unit,
 ) {
-    val rarelyUsedCutoff = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
-    val rarelyUsed = apps.filter { it.lastUsed in 1L until rarelyUsedCutoff }
+    val rarelyUsed = remember(apps) {
+        val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(RARELY_USED_DAYS)
+        apps.filter { it.lastUsed in 1L until cutoff }.take(6)
+    }
 
     Column(Modifier.fillMaxSize()) {
         Text(stringResource(R.string.apps), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
@@ -554,7 +564,7 @@ private fun ApplicationsScreen(
                     Text(stringResource(R.string.rarely_used_desc), color = Muted, fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
                 }
-                items(rarelyUsed.take(6)) { app ->
+                items(rarelyUsed, key = { "rare:${it.packageName}" }) { app ->
                     val interactionSource = remember { MutableInteractionSource() }
                     val isFocused by interactionSource.collectIsFocusedAsState()
                     Row(
@@ -582,7 +592,7 @@ private fun ApplicationsScreen(
                 Text(stringResource(R.string.all_apps_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(10.dp))
             }
-            items(apps) { app ->
+            items(apps, key = { it.packageName }) { app ->
                 val interactionSource = remember { MutableInteractionSource() }
                 val isFocused by interactionSource.collectIsFocusedAsState()
                 Row(
@@ -641,7 +651,7 @@ private fun DuplicatesScreen(
             isScanning -> Text(stringResource(R.string.scanning), color = Lime, fontSize = 15.sp)
             groups.isEmpty() -> Text(stringResource(R.string.no_duplicates), color = Muted, fontSize = 15.sp)
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                items(groups) { group ->
+                items(groups, key = { it.files.first().uri }) { group ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
                         Text(
                             pluralStringResource(R.plurals.duplicate_group, group.files.size, group.files.size, formatBytes(group.sizeEach)),
@@ -737,7 +747,7 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
         item { ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f) }
         item { ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network) }
         item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true) }
-        item { ResultRow(stringResource(R.string.device_model), "${Build.MANUFACTURER}", Build.MODEL, true) }
+        item { ResultRow(stringResource(R.string.device_model), Build.MANUFACTURER, Build.MODEL, true) }
         item { ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), "Android ${Build.VERSION.RELEASE}", true) }
         item {
             Spacer(Modifier.height(8.dp))
@@ -760,14 +770,6 @@ private fun scheduleStatusText(frequency: CleanupFrequency, sweepEnabled: Boolea
         base
     }
 }
-
-@Composable
-private fun scheduleButtonLabel(frequency: CleanupFrequency, sweepEnabled: Boolean): String =
-    if (frequency == CleanupFrequency.OFF) {
-        stringResource(R.string.schedule_cta)
-    } else {
-        stringResource(R.string.schedule_status, scheduleStatusText(frequency, sweepEnabled))
-    }
 
 @Composable
 private fun ScheduleDialog(
@@ -906,14 +908,30 @@ private fun CleanupResultDialog(result: CleanupResult, onDismiss: () -> Unit) {
     )
 }
 
+private const val RARELY_USED_DAYS = 90L
+
 private fun hasUsageStatsPermission(context: Context): Boolean {
-    val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-    val mode = appOps.checkOpNoThrow(
-        AppOpsManager.OPSTR_GET_USAGE_STATS,
-        android.os.Process.myUid(),
-        context.packageName
-    )
-    return mode == AppOpsManager.MODE_ALLOWED
+    val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
+    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+    } else {
+        @Suppress("DEPRECATION")
+        appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+    }
+    // MODE_DEFAULT defers to the regular permission check (used by some OEM settings screens).
+    return if (mode == AppOpsManager.MODE_DEFAULT) {
+        context.checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED
+    } else {
+        mode == AppOpsManager.MODE_ALLOWED
+    }
+}
+
+private fun openUsageAccessSettings(context: Context) {
+    try {
+        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, R.string.usage_settings_unavailable, Toast.LENGTH_LONG).show()
+    }
 }
 
 private fun hasStorageAccessPermission(context: Context, viewModel: TeeVViewModel): Boolean {
@@ -922,5 +940,9 @@ private fun hasStorageAccessPermission(context: Context, viewModel: TeeVViewMode
 
 @Composable
 private fun lastUsedText(timestamp: Long): String =
-    if (timestamp == 0L) stringResource(R.string.last_used_unavailable) else stringResource(R.string.last_used_at, java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(timestamp))
+    if (timestamp == 0L) {
+        stringResource(R.string.last_used_unavailable)
+    } else {
+        stringResource(R.string.last_used_at, DateFormat.getDateInstance(DateFormat.MEDIUM).format(timestamp))
+    }
 

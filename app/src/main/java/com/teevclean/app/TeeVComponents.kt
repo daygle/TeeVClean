@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,38 +19,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.util.Locale
+import java.net.URLDecoder
+import java.text.DateFormat
 
 val Ink = Color(0xFF101311)
 val Panel = Color(0xFF191E1A)
@@ -70,7 +63,7 @@ fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
             .forEach { screen -> NavItem(screen, selected, onSelect) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect)
-        Text(stringResource(R.string.version_footer, "1.0"), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
+        Text(stringResource(R.string.version_footer, BuildConfig.VERSION_NAME), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 20.dp))
     }
 }
 
@@ -91,12 +84,6 @@ fun NavItem(screen: Screen, selected: Screen, onSelect: (Screen) -> Unit) {
                 if (isFocused) Lime else if (active) Lime.copy(alpha = .35f) else Color.Transparent,
                 RoundedCornerShape(14.dp)
             )
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onSelect(screen)
-                    true
-                } else false
-            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -168,12 +155,6 @@ fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Un
                 RoundedCornerShape(18.dp),
             )
             .padding(22.dp)
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onClick()
-                    true
-                } else false
-            }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -200,14 +181,7 @@ fun SelectableChip(label: String, selected: Boolean, enabled: Boolean = true, on
             RoundedCornerShape(10.dp),
         )
     val interactive = if (enabled) {
-        base
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onClick()
-                    true
-                } else false
-            }
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+        base.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
     } else {
         base
     }
@@ -235,12 +209,6 @@ fun SelectableFileRow(title: String, subtitle: String, amount: String, selected:
                 if (selected) Lime else if (isFocused) Color.White else Color.Transparent,
                 RoundedCornerShape(18.dp),
             )
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onToggle()
-                    true
-                } else false
-            }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onToggle)
             .padding(22.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -266,7 +234,7 @@ fun FeatureCard(
     subtitle: String,
     badge: String,
     amount: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -283,12 +251,6 @@ fun FeatureCard(
                 RoundedCornerShape(18.dp)
             )
             .padding(20.dp)
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onClick()
-                    true
-                } else false
-            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -325,24 +287,24 @@ fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () ->
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(27.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(stringResource(R.string.storage_health_label), color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.used_of_total, formatBytes(storage.used), formatBytes(storage.total)), color = Muted, fontSize = 15.sp) }
-            Column(horizontalAlignment = Alignment.End) { 
+            Column(horizontalAlignment = Alignment.End) {
                 Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.available_space_label), color = Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(14.dp))
-                TvButton(onClick = onClean) { Text(stringResource(R.string.review_cleanup)) } 
+                TvButton(onClick = onClean) { Text(stringResource(R.string.review_cleanup)) }
             }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
-        
+
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val lastRun = if (history.lastRun == 0L) {
                 stringResource(R.string.history_never)
             } else {
-                java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(history.lastRun)
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(history.lastRun)
             }
             Text(
-                text = stringResource(R.string.history_last_run, lastRun) + "  •  " + 
+                text = stringResource(R.string.history_last_run, lastRun) + "  •  " +
                     pluralStringResource(R.plurals.history_total_freed, history.totalItems, formatBytes(history.totalFreedBytes), history.totalItems),
                 color = Muted,
                 fontSize = 14.sp
@@ -361,7 +323,8 @@ fun SettingsScreen(
     onEditSchedule: () -> Unit,
     onEnableUsage: () -> Unit,
     onEnableStorage: () -> Unit,
-    onRemoveFolder: (String) -> Unit
+    onAddFolder: () -> Unit,
+    onRemoveFolder: (String) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
@@ -427,33 +390,27 @@ fun SettingsScreen(
                         Spacer(Modifier.height(4.dp))
                         Text(stringResource(R.string.settings_scanned_folders_desc), color = Muted, fontSize = 13.sp)
                     }
-                    TvButton(onClick = onEnableStorage) {
-                        Text(stringResource(R.string.action_scan))
+                    TvButton(onClick = onAddFolder) {
+                        Text(stringResource(R.string.add_folder))
                     }
                 }
                 Spacer(Modifier.height(16.dp))
                 if (customFolders.isEmpty()) {
                     Text(stringResource(R.string.settings_no_folders), color = Muted, modifier = Modifier.padding(vertical = 8.dp))
                 } else {
-                    customFolders.forEach { folder ->
-                        val displayName = folder.substringAfterLast('/').substringBefore('?').ifEmpty { folder }
+                    customFolders.forEach { folder -> key(folder) {
+                        val displayName = folderDisplayName(folder)
                         val interactionSource = remember { MutableInteractionSource() }
                         val isFocused by interactionSource.collectIsFocusedAsState()
-                        
+
                         Row(
-                            verticalAlignment = Alignment.CenterVertically, 
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(if (isFocused) PanelLight else Color.Transparent)
                                 .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(12.dp))
-                                .onKeyEvent {
-                                    if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                                        onRemoveFolder(folder)
-                                        true
-                                    } else false
-                                }
                                 .clickable(interactionSource = interactionSource, indication = null) {
                                     onRemoveFolder(folder)
                                 }
@@ -462,7 +419,7 @@ fun SettingsScreen(
                             Text("📁 $displayName", color = if (isFocused) Color.White else Muted, modifier = Modifier.weight(1f), maxLines = 1)
                             Text(stringResource(R.string.remove_folder), color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
-                    }
+                    } }
                 }
             }
         }
@@ -490,6 +447,22 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * Readable name for a granted tree Uri, e.g. `content://…/tree/primary%3AMovies%2FTV` -> `Movies/TV`.
+ * The tree id is percent-encoded, so it is decoded before taking the path after the volume prefix.
+ */
+internal fun folderDisplayName(treeUri: String): String {
+    val encodedId = treeUri.substringAfter("/tree/", "").substringBefore('/').substringBefore('?')
+    // Uri.encode escapes '+', so URLDecoder's '+'-as-space rule never changes a real tree id.
+    val treeId = try {
+        URLDecoder.decode(encodedId, "UTF-8")
+    } catch (_: IllegalArgumentException) {
+        encodedId
+    }
+    // "primary:Movies" -> "Movies"; a volume root such as "1234-ABCD:" keeps its volume name.
+    return treeId.substringAfter(':').ifEmpty { treeId.substringBefore(':') }.ifEmpty { treeUri }
+}
+
 @Composable
 fun LoadingOverlay() {
     Box(Modifier.fillMaxWidth().height(4.dp)) {
@@ -512,7 +485,7 @@ fun PermissionRationale(
     ) {
         Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
-        Text(description, color = Muted, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(description, color = Muted, fontSize = 16.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
         TvButton(onClick = onClick) { Text(stringResource(R.string.enable)) }
         if (fallbackLabel != null && onFallback != null) {
@@ -534,7 +507,7 @@ fun TvButton(
     Button(
         onClick = onClick,
         interactionSource = interactionSource,
-        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+        colors = ButtonDefaults.buttonColors(
             containerColor = if (isFocused) Lime else PanelLight,
             contentColor = if (isFocused) Ink else Color.White
         ),
@@ -543,13 +516,7 @@ fun TvButton(
                 if (isFocused) 2.dp else 0.dp,
                 if (isFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
                 RoundedCornerShape(8.dp)
-            )
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onClick()
-                    true
-                } else false
-            },
+            ),
         shape = RoundedCornerShape(8.dp)
     ) {
         content()
@@ -568,17 +535,11 @@ fun TvTextButton(
     TextButton(
         onClick = onClick,
         interactionSource = interactionSource,
-        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+        colors = ButtonDefaults.textButtonColors(
             contentColor = if (isFocused) Lime else Muted
         ),
         modifier = modifier
             .background(if (isFocused) Color.White.copy(alpha = 0.05f) else Color.Transparent, RoundedCornerShape(8.dp))
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionCenter || it.key == Key.Enter)) {
-                    onClick()
-                    true
-                } else false
-            }
     ) {
         content()
     }

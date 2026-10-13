@@ -75,4 +75,25 @@ class CleanupLogicTest {
         val odd = StorageBreakdown(totalBytes = 1000, freeBytes = 400, appsBytes = 900, appCacheBytes = 0, appDataKnown = true)
         assertEquals(0L, odd.systemAndOtherBytes)
     }
+
+    @Test
+    fun `file filter matches large old or installer files`() {
+        val day = 24L * 60 * 60 * 1000
+        val now = 100 * day
+        val filter = FileFilter(minSize = 1000, minAgeDays = 30, showInstallers = true)
+
+        assertTrue(filter.matches("big.mkv", size = 1000, modified = now, now = now))
+        assertTrue(filter.matches("old.txt", size = 1, modified = now - 31 * day, now = now))
+        assertTrue(filter.matches("app.apk", size = 1, modified = now, now = now))
+        assertFalse(filter.matches("new.txt", size = 1, modified = now - 29 * day, now = now))
+        assertFalse(filter.copy(showInstallers = false).matches("app.apk", size = 1, modified = now, now = now))
+    }
+
+    @Test
+    fun `folder display name decodes the tree id`() {
+        assertEquals("Movies/TV", folderDisplayName("content://com.android.externalstorage.documents/tree/primary%3AMovies%2FTV"))
+        assertEquals("Download", folderDisplayName("content://com.android.externalstorage.documents/tree/primary%3ADownload"))
+        assertEquals("1234-ABCD", folderDisplayName("content://com.android.externalstorage.documents/tree/1234-ABCD%3A"))
+        assertEquals("not-a-tree", folderDisplayName("not-a-tree"))
+    }
 }
