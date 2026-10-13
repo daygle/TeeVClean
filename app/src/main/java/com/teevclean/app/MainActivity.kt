@@ -9,8 +9,10 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Process
 import android.os.SystemClock
+import android.os.storage.StorageManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -18,9 +20,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +44,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -49,10 +57,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -64,6 +77,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.concurrent.TimeUnit
 
@@ -83,6 +97,17 @@ class MainActivity : ComponentActivity() {
             return@registerForActivityResult
         }
         viewModel.addCustomFolder(uri.toString())
+    }
+
+    /** Free space just before the clear-all-caches prompt opened, to report what it freed. */
+    private var freeBeforeCacheClear = 0L
+
+    private val clearCachesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            viewModel.onSystemCachesCleared(freeBeforeCacheClear) { freed ->
+                Toast.makeText(this, getString(R.string.app_caches_cleared, formatBytes(freed)), Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -105,6 +130,7 @@ class MainActivity : ComponentActivity() {
                 },
                 // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
                 onAddFolder = ::pickFolder,
+                onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ::clearAllAppCaches else null,
             )
         }
     }
@@ -119,6 +145,27 @@ class MainActivity : ComponentActivity() {
             } else {
                 storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
             }
+        }
+    }
+
+    /**
+     * Opens Android's own "clear all app caches" confirmation (Android 11+). Android only offers
+     * it to apps holding all-files access, so that is requested first when missing.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun clearAllAppCaches() {
+        if (!Environment.isExternalStorageManager()) {
+            Toast.makeText(this, R.string.clear_caches_needs_access, Toast.LENGTH_LONG).show()
+            openAllFilesAccessSettings()
+            return
+        }
+        freeBeforeCacheClear = viewModel.freeBytes()
+        try {
+            clearCachesLauncher.launch(Intent(StorageManager.ACTION_CLEAR_APP_CACHE))
+        } catch (_: Exception) {
+            // ActivityNotFoundException on TVs without the screen; SecurityException if access was just revoked.
+            Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
+            viewModel.openStorageManager()
         }
     }
 
@@ -142,7 +189,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, onAddFolder: () -> Unit) {
+fun TeeVCleanApp(
+    viewModel: TeeVViewModel,
+    onRequestStorageAccess: () -> Unit,
+    onAddFolder: () -> Unit,
+    onClearAllCaches: (() -> Unit)?,
+) {
     var showCleanup by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showSweep by remember { mutableStateOf(false) }
@@ -150,6 +202,19 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, o
     val context = LocalContext.current
     var lastBackPress by remember { mutableLongStateOf(0L) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val contentFocus = remember { FocusRequester() }
+    // Whether D-pad focus was last in the content pane (rather than the sidebar).
+    val focusWasInContent = remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // When the focused item disappears (a card that opened another screen, Back, a deleted
+    // row), Compose drops focus and the next D-pad press would jump to the top-left menu item.
+    // Put focus back into the content instead, once the new content is laid out.
+    val restoreContentFocus = {
+        scope.launch {
+            withFrameNanos { }
+            contentFocus.tryRequestFocus()
+        }
+    }
 
     // Fires on first composition too, which performs the initial load.
     DisposableEffect(lifecycleOwner) {
@@ -212,76 +277,89 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, o
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Ink) {
-            // The progress bar overlays the top edge so content doesn't shift while refreshing.
-            Box {
-                Row(Modifier.fillMaxSize().padding(44.dp)) {
+            // Android TV safe area: 48dp left/right and 27dp top/bottom stay clear of overscan.
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 48.dp, vertical = 27.dp)
+                    .onFocusChanged { if (!it.hasFocus && focusWasInContent.value) restoreContentFocus() }
+            ) {
+                Box(Modifier.onFocusChanged { if (it.hasFocus) focusWasInContent.value = false }) {
                     Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
-                    Spacer(Modifier.width(38.dp))
-                    Box(Modifier.weight(1f)) {
-                        when (viewModel.currentScreen) {
-                            Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, viewModel.cleanupHistory, { showCleanup = true }) { viewModel.currentScreen = it }
-                            Screen.CLEAN -> CleanupScreen(
-                                cacheSize = viewModel.cacheSize,
-                                onReview = { showCleanup = true },
-                                onSweep = { showSweep = true },
-                                onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
-                                onFreeUpSpace = { viewModel.openStorageManager() },
-                                onNavigate = { viewModel.currentScreen = it },
-                            )
-                            Screen.LARGE -> {
-                                if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty() && !viewModel.hasFullStorageAccess()) {
-                                    PermissionRationale(
-                                        stringResource(R.string.large_files),
-                                        stringResource(R.string.storage_access_rationale),
-                                        onRequestStorageAccess,
-                                        fallbackLabel = stringResource(R.string.settings),
-                                        onFallback = { viewModel.currentScreen = Screen.SETTINGS }
-                                    )
-                                } else {
-                                    LargeFilesScreen(
-                                        files = viewModel.largeFiles,
-                                        filter = viewModel.fileFilter,
-                                        onUpdateFilter = { viewModel.updateFileFilter(it) },
-                                        onDeleteMany = { selected -> viewModel.deleteFiles(selected) { result -> cleanupResult = result } },
-                                    )
-                                }
-                            }
-                            Screen.APPS -> ApplicationsScreen(
-                                apps = viewModel.apps,
-                                hasUsageAccess = hasUsageStatsPermission(context),
-                                onEnableUsage = { openUsageAccessSettings(context) },
-                                onOpenInfo = { viewModel.openAppInfo(it) },
-                                onUninstall = { viewModel.uninstallApp(it) },
-                            )
-                            Screen.DUPLICATES -> DuplicatesScreen(
-                                groups = viewModel.duplicateGroups,
-                                isScanning = viewModel.isScanningDuplicates,
-                                onScan = { viewModel.findDuplicates() },
-                                onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
-                            )
-                            Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
-                            Screen.BREAKDOWN -> StorageBreakdownScreen(
-                                breakdown = viewModel.storageBreakdown,
-                                isLoading = viewModel.isLoadingBreakdown,
-                                onLoad = { viewModel.loadBreakdown() },
-                            )
-                            Screen.SETTINGS -> SettingsScreen(
-                                scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
-                                customFolders = viewModel.customFolders,
-                                hasUsageAccess = hasUsageStatsPermission(context),
-                                hasStorageAccess = hasStorageAccessPermission(context, viewModel),
-                                appVersion = BuildConfig.VERSION_NAME,
-                                onEditSchedule = { showSchedule = true },
-                                onEnableUsage = { openUsageAccessSettings(context) },
-                                onEnableStorage = onRequestStorageAccess,
-                                onAddFolder = onAddFolder,
-                                onRemoveFolder = { viewModel.removeCustomFolder(it) },
-                            )
-                        }
-                    }
                 }
-                if (viewModel.isRefreshing) {
-                    LoadingOverlay()
+                Spacer(Modifier.width(32.dp))
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .onFocusChanged { if (it.hasFocus) focusWasInContent.value = true }
+                        .focusRequester(contentFocus)
+                        .focusGroup()
+                ) {
+                    when (viewModel.currentScreen) {
+                        Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, viewModel.cleanupHistory, { showCleanup = true }) { viewModel.currentScreen = it }
+                        Screen.CLEAN -> CleanupScreen(
+                            cacheSize = viewModel.cacheSize,
+                            onReview = { showCleanup = true },
+                            onSweep = { showSweep = true },
+                            onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
+                            onFreeUpSpace = { viewModel.openStorageManager() },
+                            onClearAllCaches = onClearAllCaches,
+                            onNavigate = { viewModel.currentScreen = it },
+                        )
+                        Screen.LARGE -> {
+                            if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty() && !viewModel.hasFullStorageAccess()) {
+                                PermissionRationale(
+                                    stringResource(R.string.large_files),
+                                    stringResource(R.string.storage_access_rationale),
+                                    onRequestStorageAccess,
+                                    fallbackLabel = stringResource(R.string.settings),
+                                    onFallback = { viewModel.currentScreen = Screen.SETTINGS }
+                                )
+                            } else {
+                                LargeFilesScreen(
+                                    files = viewModel.largeFiles,
+                                    filter = viewModel.fileFilter,
+                                    onUpdateFilter = { viewModel.updateFileFilter(it) },
+                                    onDeleteMany = { selected -> viewModel.deleteFiles(selected) { result -> cleanupResult = result } },
+                                )
+                            }
+                        }
+                        Screen.APPS -> ApplicationsScreen(
+                            apps = viewModel.apps,
+                            hasUsageAccess = hasUsageStatsPermission(context),
+                            onEnableUsage = { openUsageAccessSettings(context) },
+                            onOpenInfo = { viewModel.openAppInfo(it) },
+                            onUninstall = { viewModel.uninstallApp(it) },
+                        )
+                        Screen.DUPLICATES -> DuplicatesScreen(
+                            groups = viewModel.duplicateGroups,
+                            isScanning = viewModel.isScanningDuplicates,
+                            onScan = { viewModel.findDuplicates() },
+                            onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
+                        )
+                        Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
+                        Screen.BREAKDOWN -> StorageBreakdownScreen(
+                            breakdown = viewModel.storageBreakdown,
+                            isLoading = viewModel.isLoadingBreakdown,
+                            onLoad = { viewModel.loadBreakdown() },
+                        )
+                        Screen.SETTINGS -> SettingsScreen(
+                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
+                            customFolders = viewModel.customFolders,
+                            hasUsageAccess = hasUsageStatsPermission(context),
+                            hasStorageAccess = hasStorageAccessPermission(context, viewModel),
+                            appVersion = BuildConfig.VERSION_NAME,
+                            onEditSchedule = { showSchedule = true },
+                            onEnableUsage = { openUsageAccessSettings(context) },
+                            onEnableStorage = onRequestStorageAccess,
+                            onAddFolder = onAddFolder,
+                            onRemoveFolder = { viewModel.removeCustomFolder(it) },
+                        )
+                    }
+                    // Overlays the top edge so content doesn't shift while refreshing.
+                    if (viewModel.isRefreshing) {
+                        LoadingOverlay(Modifier.align(Alignment.TopCenter).offset(y = (-12).dp))
+                    }
                 }
             }
         }
@@ -290,61 +368,57 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, o
 
 @Composable
 private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, history: CleanupHistory, onClean: () -> Unit, onNavigate: (Screen) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-        item {
-            Text(stringResource(R.string.greeting), color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(7.dp))
-            Text(stringResource(R.string.sub_greeting), color = Muted, fontSize = 16.sp)
-            Spacer(Modifier.height(28.dp))
-            StorageCard(storage, history, onClean)
-        }
-        item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
-        item {
-            FeatureCard(
-                stringResource(R.string.storage_breakdown),
-                stringResource(R.string.storage_breakdown_desc),
-                "Storage",
-                "View",
-                Screen.BREAKDOWN.icon
-            ) { onNavigate(Screen.BREAKDOWN) }
-        }
-        item {
-            FeatureCard(
-                stringResource(R.string.large_files),
-                stringResource(R.string.feature_large_files_desc),
-                "Files",
-                if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size }),
-                Screen.LARGE.icon
-            ) { onNavigate(Screen.LARGE) }
-        }
-        item {
-            FeatureCard(
-                stringResource(R.string.apps),
-                pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size),
-                "Apps",
-                "Guided",
-                Screen.APPS.icon
-            ) { onNavigate(Screen.APPS) }
-        }
-        item {
-            FeatureCard(
-                stringResource(R.string.device_health),
-                stringResource(R.string.feature_device_health_desc),
-                "Health",
-                "Check",
-                Screen.HEALTH.icon
-            ) { onNavigate(Screen.HEALTH) }
-        }
-        item {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("✦", color = Lime, fontSize = 28.sp)
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text(stringResource(R.string.privacy_title), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(stringResource(R.string.privacy_desc), color = Color(0xFFC4D1C2), fontSize = 13.sp)
+    ScreenScaffold(stringResource(R.string.greeting), stringResource(R.string.sub_greeting)) {
+        ScreenList(spacing = 18.dp) {
+            item { StorageCard(storage, history, onClean) }
+            item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
+            item {
+                FeatureCard(
+                    stringResource(R.string.storage_breakdown),
+                    stringResource(R.string.storage_breakdown_desc),
+                    "Storage",
+                    "View",
+                    Screen.BREAKDOWN.icon
+                ) { onNavigate(Screen.BREAKDOWN) }
+            }
+            item {
+                FeatureCard(
+                    stringResource(R.string.large_files),
+                    stringResource(R.string.feature_large_files_desc),
+                    "Files",
+                    if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size }),
+                    Screen.LARGE.icon
+                ) { onNavigate(Screen.LARGE) }
+            }
+            item {
+                FeatureCard(
+                    stringResource(R.string.apps),
+                    pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size),
+                    "Apps",
+                    "Guided",
+                    Screen.APPS.icon
+                ) { onNavigate(Screen.APPS) }
+            }
+            item {
+                FeatureCard(
+                    stringResource(R.string.device_health),
+                    stringResource(R.string.feature_device_health_desc),
+                    "Health",
+                    "Check",
+                    Screen.HEALTH.icon
+                ) { onNavigate(Screen.HEALTH) }
+            }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF253020)).padding(22.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("✦", color = Lime, fontSize = 28.sp)
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(stringResource(R.string.privacy_title), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Text(stringResource(R.string.privacy_desc), color = Color(0xFFC4D1C2), fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -358,59 +432,67 @@ private fun CleanupScreen(
     onSweep: () -> Unit,
     onFindDuplicates: () -> Unit,
     onFreeUpSpace: () -> Unit,
+    onClearAllCaches: (() -> Unit)?,
     onNavigate: (Screen) -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item {
-            Text(stringResource(R.string.cleanup), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.cleanup_desc), color = Muted, fontSize = 16.sp)
-        }
-        item {
-            ActionRow(
-                stringResource(R.string.this_app_cache),
-                stringResource(R.string.this_app_cache_desc),
-                formatBytes(cacheSize),
-                onClick = onReview
-            )
-        }
-        item {
-            ActionRow(
-                stringResource(R.string.other_app_caches),
-                stringResource(R.string.other_app_caches_desc),
-                stringResource(R.string.action_open),
-            ) { onNavigate(Screen.APPS) }
-        }
-        item {
-            ActionRow(
-                stringResource(R.string.large_files),
-                stringResource(R.string.feature_large_files_desc),
-                stringResource(R.string.action_review),
-            ) { onNavigate(Screen.LARGE) }
-        }
-        item {
-            ActionRow(
-                stringResource(R.string.temp_and_logs),
-                stringResource(R.string.temp_and_logs_desc),
-                stringResource(R.string.action_sweep),
-                onClick = onSweep,
-            )
-        }
-        item {
-            ActionRow(
-                stringResource(R.string.duplicates),
-                stringResource(R.string.duplicates_desc),
-                stringResource(R.string.action_scan),
-                onClick = onFindDuplicates,
-            )
-        }
-        item {
-            ActionRow(
-                stringResource(R.string.free_up_space),
-                stringResource(R.string.other_app_caches_desc),
-                stringResource(R.string.action_open),
-                onClick = onFreeUpSpace,
-            )
+    ScreenScaffold(stringResource(R.string.cleanup), stringResource(R.string.cleanup_desc)) {
+        ScreenList(spacing = 14.dp) {
+            item {
+                ActionRow(
+                    stringResource(R.string.this_app_cache),
+                    stringResource(R.string.this_app_cache_desc),
+                    formatBytes(cacheSize),
+                    onClick = onReview
+                )
+            }
+            if (onClearAllCaches != null) {
+                item {
+                    ActionRow(
+                        stringResource(R.string.all_app_caches),
+                        stringResource(R.string.all_app_caches_desc),
+                        stringResource(R.string.action_clear),
+                        onClick = onClearAllCaches,
+                    )
+                }
+            }
+            item {
+                ActionRow(
+                    stringResource(R.string.other_app_caches),
+                    stringResource(R.string.other_app_caches_desc),
+                    stringResource(R.string.action_open),
+                ) { onNavigate(Screen.APPS) }
+            }
+            item {
+                ActionRow(
+                    stringResource(R.string.large_files),
+                    stringResource(R.string.feature_large_files_desc),
+                    stringResource(R.string.action_review),
+                ) { onNavigate(Screen.LARGE) }
+            }
+            item {
+                ActionRow(
+                    stringResource(R.string.temp_and_logs),
+                    stringResource(R.string.temp_and_logs_desc),
+                    stringResource(R.string.action_sweep),
+                    onClick = onSweep,
+                )
+            }
+            item {
+                ActionRow(
+                    stringResource(R.string.duplicates),
+                    stringResource(R.string.duplicates_desc),
+                    stringResource(R.string.action_scan),
+                    onClick = onFindDuplicates,
+                )
+            }
+            item {
+                ActionRow(
+                    stringResource(R.string.free_up_space),
+                    stringResource(R.string.other_app_caches_desc),
+                    stringResource(R.string.action_open),
+                    onClick = onFreeUpSpace,
+                )
+            }
         }
     }
 }
@@ -422,7 +504,7 @@ private fun LargeFilesScreen(
     onUpdateFilter: (FileFilter) -> Unit,
     onDeleteMany: (List<FileSummary>) -> Unit,
 ) {
-    var activeFilters by remember { mutableStateOf(setOf(0, 1, 2)) }
+    var activeFilters by remember { mutableStateOf(setOf(0, 1, 2, 3)) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var showConfirm by remember { mutableStateOf(false) }
     var showFilterSettings by remember { mutableStateOf(false) }
@@ -434,7 +516,8 @@ private fun LargeFilesScreen(
         files.filter { file ->
             (0 in activeFilters && filter.isLarge(file.size)) ||
                 (1 in activeFilters && filter.isOld(file.modified, now)) ||
-                (2 in activeFilters && filter.isListedInstaller(file.name))
+                (2 in activeFilters && filter.isListedInstaller(file.name)) ||
+                (3 in activeFilters && file.alreadyInstalled)
         }
     }
 
@@ -466,65 +549,69 @@ private fun LargeFilesScreen(
                     showConfirm = false
                 }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TvTextButton(onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    ScreenScaffold(
+        stringResource(R.string.large_files),
+        stringResource(R.string.large_files_desc),
+        actions = { TvButton(onClick = { showFilterSettings = true }) { Text(stringResource(R.string.filter_settings)) } },
+    ) {
+        // Chips scroll sideways (D-pad focus follows) so selection controls always keep their place.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.large_files), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.large_files_desc), color = Muted, fontSize = 16.sp)
-            }
-            TvButton(onClick = { showFilterSettings = true }) {
-                Text(stringResource(R.string.filter_settings))
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            val filterOptions = mutableListOf(
-                (if (largeBytes >= 1024 * 1024 * 1024) "${largeBytes / (1024 * 1024 * 1024)} GB+" else "${largeBytes / (1024 * 1024)} MB+") to 0,
-                "${filter.minAgeDays} Days+" to 1
-            )
-            if (filter.showInstallers) {
-                filterOptions.add(stringResource(R.string.filter_installers) to 2)
-            }
-
-            filterOptions.forEach { (label, index) ->
-                SelectableChip(
-                    label = label,
-                    selected = index in activeFilters,
-                    onClick = {
-                        activeFilters = if (index in activeFilters) activeFilters - index else activeFilters + index
-                    }
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                val filterOptions = mutableListOf(
+                    (if (largeBytes >= 1024 * 1024 * 1024) "${largeBytes / (1024 * 1024 * 1024)} GB+" else "${largeBytes / (1024 * 1024)} MB+") to 0,
+                    "${filter.minAgeDays} Days+" to 1
                 )
-            }
-        }
+                if (filter.showInstallers) {
+                    filterOptions.add(stringResource(R.string.filter_installers) to 2)
+                }
+                if (files.any { it.alreadyInstalled }) {
+                    filterOptions.add(stringResource(R.string.filter_already_installed) to 3)
+                }
 
-        if (filteredFiles.isEmpty()) {
-            Spacer(Modifier.height(20.dp))
-            Text(stringResource(R.string.no_large_files), color = Muted, fontSize = 15.sp)
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                filterOptions.forEach { (label, index) ->
+                    SelectableChip(
+                        label = label,
+                        selected = index in activeFilters,
+                        onClick = {
+                            activeFilters = if (index in activeFilters) activeFilters - index else activeFilters + index
+                        }
+                    )
+                }
+            }
+            if (filteredFiles.isNotEmpty()) {
+                Spacer(Modifier.width(12.dp))
                 TvTextButton(onClick = {
                     selected = if (allSelected) emptySet() else filteredFiles.mapTo(mutableSetOf()) { it.uri }
                 }) { Text(stringResource(if (allSelected) R.string.clear_selection else R.string.select_all)) }
-                Spacer(Modifier.weight(1f))
-                if (selectedFiles.isNotEmpty()) {
-                    TvButton(onClick = { showConfirm = true }) {
-                        Text(stringResource(R.string.delete_selected, selectedFiles.size))
-                    }
+            }
+            if (selectedFiles.isNotEmpty()) {
+                Spacer(Modifier.width(8.dp))
+                TvButton(onClick = { showConfirm = true }) {
+                    Text(stringResource(R.string.delete_selected, selectedFiles.size))
                 }
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+        }
+        Spacer(Modifier.height(14.dp))
+        ScreenList(spacing = 10.dp) {
+            if (filteredFiles.isEmpty()) {
+                item { Text(stringResource(R.string.no_large_files), color = Muted, fontSize = 15.sp) }
+            } else {
                 items(filteredFiles, key = { it.uri }) { file ->
-                    SelectableFileRow(file.name, file.path, formatBytes(file.size), file.uri in selected) {
+                    val subtitle = if (file.alreadyInstalled) stringResource(R.string.installed_suffix, file.path) else file.path
+                    SelectableFileRow(file.name, subtitle, formatBytes(file.size), file.uri in selected) {
                         selected = if (file.uri in selected) selected - file.uri else selected + file.uri
                     }
                 }
             }
+            item { Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 13.sp) }
         }
-        Text(stringResource(R.string.folder_access_disclaimer), color = Muted, fontSize = 15.sp)
     }
 }
 
@@ -541,80 +628,90 @@ private fun ApplicationsScreen(
         apps.filter { it.lastUsed in 1L until cutoff }.take(6)
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Text(stringResource(R.string.apps), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.app_review_desc), color = Muted, fontSize = 16.sp)
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(R.string.app_review_cache_hint), color = Muted, fontSize = 13.sp)
-        if (!hasUsageAccess) {
-            Spacer(Modifier.height(14.dp))
-            ActionRow(
-                stringResource(R.string.usage_hint_title),
-                stringResource(R.string.usage_hint_desc),
-                stringResource(R.string.enable),
-                onClick = onEnableUsage,
-            )
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+    ScreenScaffold(stringResource(R.string.apps), stringResource(R.string.app_review_desc)) {
+        ScreenList(spacing = 10.dp) {
+            item { Text(stringResource(R.string.app_review_cache_hint), color = Muted, fontSize = 13.sp) }
+            if (!hasUsageAccess) {
+                item {
+                    ActionRow(
+                        stringResource(R.string.usage_hint_title),
+                        stringResource(R.string.usage_hint_desc),
+                        stringResource(R.string.enable),
+                        onClick = onEnableUsage,
+                    )
+                }
+            }
             if (rarelyUsed.isNotEmpty()) {
                 item {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(stringResource(R.string.rarely_used_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Text(stringResource(R.string.rarely_used_desc), color = Muted, fontSize = 13.sp)
-                    Spacer(Modifier.height(10.dp))
                 }
                 items(rarelyUsed, key = { "rare:${it.packageName}" }) { app ->
-                    val interactionSource = remember { MutableInteractionSource() }
-                    val isFocused by interactionSource.collectIsFocusedAsState()
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isFocused) PanelLight else Color(0xFF2A211C))
-                            .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(16.dp))
-                            .focusable(interactionSource = interactionSource)
-                            .padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(app.label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                            Text(lastUsedText(app.lastUsed), color = Color(0xFFFFB74D), fontSize = 14.sp)
-                        }
-                        Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(16.dp))
-                        TvButton(onClick = { onUninstall(app.packageName) }) { Text(stringResource(R.string.uninstall)) }
-                    }
+                    AppRow(
+                        title = app.label,
+                        subtitle = lastUsedText(app.lastUsed),
+                        subtitleColor = Color(0xFFFFB74D),
+                        size = formatBytes(app.size),
+                        action = stringResource(R.string.uninstall),
+                        background = Color(0xFF2A211C),
+                    ) { onUninstall(app.packageName) }
                 }
             }
             item {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.all_apps_title), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(10.dp))
             }
             items(apps, key = { it.packageName }) { app ->
-                val interactionSource = remember { MutableInteractionSource() }
-                val isFocused by interactionSource.collectIsFocusedAsState()
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isFocused) PanelLight else Panel)
-                        .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(16.dp))
-                        .focusable(interactionSource = interactionSource)
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(app.label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${app.packageName} • ${lastUsedText(app.lastUsed)}", color = Muted, fontSize = 14.sp)
-                    }
-                    Text(formatBytes(app.size), color = Lime, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(16.dp))
-                    TvTextButton(onClick = { onOpenInfo(app.packageName) }) { Text(stringResource(R.string.app_info_btn)) }
-                }
+                AppRow(
+                    title = app.label,
+                    subtitle = "${app.packageName} • ${lastUsedText(app.lastUsed)}",
+                    subtitleColor = Muted,
+                    size = formatBytes(app.size),
+                    action = stringResource(R.string.app_info_btn),
+                    background = Panel,
+                ) { onOpenInfo(app.packageName) }
             }
         }
+    }
+}
+
+/**
+ * One app in the list. The whole row is a single focus stop that runs [onClick]; a separate
+ * button inside a focusable row would make every app take two D-pad presses to pass.
+ */
+@Composable
+private fun AppRow(
+    title: String,
+    subtitle: String,
+    subtitleColor: Color,
+    size: String,
+    action: String,
+    background: Color,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (isFocused) PanelLight else background)
+            .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(16.dp))
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = subtitleColor, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(size, color = Lime, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(16.dp))
+        Text(action, color = if (isFocused) Color.White else Muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.width(10.dp))
+        Text("›", color = Muted, fontSize = 24.sp)
     }
 }
 
@@ -640,17 +737,19 @@ private fun DuplicatesScreen(
                     pending = null
                 }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TvTextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.duplicates), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.duplicates_desc), color = Muted, fontSize = 16.sp)
+    ScreenScaffold(
+        stringResource(R.string.duplicates),
+        stringResource(R.string.duplicates_desc),
+        actions = { TvButton(onClick = onScan) { Text(stringResource(R.string.rescan)) } },
+    ) {
         when {
             isScanning -> Text(stringResource(R.string.scanning), color = Lime, fontSize = 15.sp)
             groups.isEmpty() -> Text(stringResource(R.string.no_duplicates), color = Muted, fontSize = 15.sp)
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+            else -> ScreenList {
                 items(groups, key = { it.files.first().uri }) { group ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
                         Text(
@@ -664,6 +763,7 @@ private fun DuplicatesScreen(
                                 color = if (index == 0) Lime else Muted,
                                 fontSize = 13.sp,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         Spacer(Modifier.height(12.dp))
@@ -674,7 +774,6 @@ private fun DuplicatesScreen(
                 }
             }
         }
-        TvButton(onClick = onScan) { Text(stringResource(R.string.rescan)) }
     }
 }
 
@@ -686,39 +785,47 @@ private fun StorageBreakdownScreen(
 ) {
     LaunchedEffect(Unit) { if (breakdown == null && !isLoading) onLoad() }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.storage_breakdown), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.storage_breakdown_desc), color = Muted, fontSize = 16.sp)
+    ScreenScaffold(
+        stringResource(R.string.storage_breakdown),
+        stringResource(R.string.storage_breakdown_desc),
+        actions = { TvButton(onClick = onLoad) { Text(stringResource(R.string.rescan)) } },
+    ) {
         if (isLoading || breakdown == null) {
             Text(stringResource(R.string.scanning), color = Lime, fontSize = 15.sp)
         } else {
-            val orange = Color(0xFFFFB74D)
-            val gray = Color(0xFF303930)
-            val total = breakdown.totalBytes.coerceAtLeast(1)
-            val appsFrac = breakdown.appsBytes.toFloat() / total
-            val sysFrac = breakdown.systemAndOtherBytes.toFloat() / total
-            val freeFrac = breakdown.freeBytes.toFloat() / total
-
-            Text(
-                stringResource(R.string.used_of_total, formatBytes(breakdown.usedBytes), formatBytes(breakdown.totalBytes)),
-                color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-            )
-            Row(Modifier.fillMaxWidth().height(18.dp).clip(RoundedCornerShape(6.dp)).background(gray)) {
-                if (appsFrac > 0f) Box(Modifier.weight(appsFrac).fillMaxHeight().background(Lime))
-                if (sysFrac > 0f) Box(Modifier.weight(sysFrac).fillMaxHeight().background(orange))
-                if (freeFrac > 0f) Box(Modifier.weight(freeFrac).fillMaxHeight())
-            }
-            if (breakdown.appDataKnown) {
-                BreakdownRow(stringResource(R.string.breakdown_apps), formatBytes(breakdown.appsBytes), Lime)
-                BreakdownRow(stringResource(R.string.breakdown_app_cache), formatBytes(breakdown.appCacheBytes), Muted, indent = true)
-            }
-            BreakdownRow(stringResource(R.string.breakdown_system_other), formatBytes(breakdown.systemAndOtherBytes), orange)
-            BreakdownRow(stringResource(R.string.breakdown_free), formatBytes(breakdown.freeBytes), gray)
-            if (!breakdown.appDataKnown) {
-                Text(stringResource(R.string.breakdown_needs_usage), color = Muted, fontSize = 13.sp)
-            }
+            BreakdownCard(breakdown)
         }
-        TvButton(onClick = onLoad) { Text(stringResource(R.string.rescan)) }
+    }
+}
+
+@Composable
+private fun BreakdownCard(breakdown: StorageBreakdown) {
+    val orange = Color(0xFFFFB74D)
+    val gray = Color(0xFF303930)
+    val total = breakdown.totalBytes.coerceAtLeast(1)
+    val appsFrac = breakdown.appsBytes.toFloat() / total
+    val sysFrac = breakdown.systemAndOtherBytes.toFloat() / total
+    val freeFrac = breakdown.freeBytes.toFloat() / total
+
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            stringResource(R.string.used_of_total, formatBytes(breakdown.usedBytes), formatBytes(breakdown.totalBytes)),
+            color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+        )
+        Row(Modifier.fillMaxWidth().height(18.dp).clip(RoundedCornerShape(6.dp)).background(gray)) {
+            if (appsFrac > 0f) Box(Modifier.weight(appsFrac).fillMaxHeight().background(Lime))
+            if (sysFrac > 0f) Box(Modifier.weight(sysFrac).fillMaxHeight().background(orange))
+            if (freeFrac > 0f) Box(Modifier.weight(freeFrac).fillMaxHeight())
+        }
+        if (breakdown.appDataKnown) {
+            BreakdownRow(stringResource(R.string.breakdown_apps), formatBytes(breakdown.appsBytes), Lime)
+            BreakdownRow(stringResource(R.string.breakdown_app_cache), formatBytes(breakdown.appCacheBytes), Muted, indent = true)
+        }
+        BreakdownRow(stringResource(R.string.breakdown_system_other), formatBytes(breakdown.systemAndOtherBytes), orange)
+        BreakdownRow(stringResource(R.string.breakdown_free), formatBytes(breakdown.freeBytes), gray)
+        if (!breakdown.appDataKnown) {
+            Text(stringResource(R.string.breakdown_needs_usage), color = Muted, fontSize = 13.sp)
+        }
     }
 }
 
@@ -737,21 +844,14 @@ private fun BreakdownRow(label: String, value: String, swatch: Color, indent: Bo
 private fun HealthScreen(context: Context, storage: StorageSummary) {
     val manager = context.getSystemService(ConnectivityManager::class.java)
     val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Text(stringResource(R.string.device_health), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text(stringResource(R.string.device_health_desc), color = Muted, fontSize = 16.sp)
-            Spacer(Modifier.height(14.dp))
-        }
-        item { ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f) }
-        item { ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network) }
-        item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true) }
-        item { ResultRow(stringResource(R.string.device_model), Build.MANUFACTURER, Build.MODEL, true) }
-        item { ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), "Android ${Build.VERSION.RELEASE}", true) }
-        item {
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp)
+    ScreenScaffold(stringResource(R.string.device_health), stringResource(R.string.device_health_desc)) {
+        ScreenList(spacing = 10.dp) {
+            item { ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f) }
+            item { ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network) }
+            item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true) }
+            item { ResultRow(stringResource(R.string.device_model), Build.MANUFACTURER, Build.MODEL, true) }
+            item { ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), "Android ${Build.VERSION.RELEASE}", true) }
+            item { Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp) }
         }
     }
 }
@@ -785,7 +885,7 @@ private fun ScheduleDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.schedule_title), color = Muted) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 15.sp)
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -813,7 +913,7 @@ private fun ScheduleDialog(
             }
         },
         confirmButton = { TvButton(onClick = { onSave(frequency, sweep && hasFolders) }) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -824,7 +924,7 @@ private fun CleanupDialog(cacheSize: Long, onDismiss: () -> Unit, onCleaned: () 
         title = { Text(stringResource(R.string.confirm_cleanup)) },
         text = { Text(stringResource(R.string.confirm_cleanup_desc, formatBytes(cacheSize))) },
         confirmButton = { TvButton(onClick = onCleaned) { Text(stringResource(R.string.remove_cache)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -835,7 +935,7 @@ private fun SweepDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         title = { Text(stringResource(R.string.temp_and_logs)) },
         text = { Text(stringResource(R.string.confirm_sweep_desc)) },
         confirmButton = { TvButton(onClick = onConfirm) { Text(stringResource(R.string.action_sweep)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -864,7 +964,7 @@ private fun FilterDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.filter_settings), color = Muted) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.filter_min_size), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -888,7 +988,7 @@ private fun FilterDialog(
             }
         },
         confirmButton = { TvButton(onClick = { onSave(filter) }) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -904,7 +1004,7 @@ private fun CleanupResultDialog(result: CleanupResult, onDismiss: () -> Unit) {
                 Text(pluralStringResource(R.plurals.cleanup_freed, result.itemsRemoved, formatBytes(result.freedBytes), result.itemsRemoved))
             }
         },
-        confirmButton = { TvButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
+        confirmButton = { TvButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.done)) } },
     )
 }
 

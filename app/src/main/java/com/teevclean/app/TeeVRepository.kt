@@ -17,6 +17,7 @@ import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -55,6 +56,8 @@ data class FileSummary(
     val size: Long,
     val modified: Long,
     val uri: String,
+    /** An installer whose app is already installed at the same or a newer version. */
+    val alreadyInstalled: Boolean = false,
 )
 
 /** Outcome of a cleanup action, so the UI can report what was actually removed. */
@@ -121,12 +124,55 @@ object FileClassifier {
             lower.endsWith(".crdownload") || lower.endsWith(".download")
     }
 
+    /**
+     * Metadata other computers leave on shared drives: macOS AppleDouble (`._name`) companions
+     * and Windows folder settings. Android never reads them.
+     */
+    fun isForeignMetadata(name: String?): Boolean {
+        val lower = name?.lowercase() ?: return false
+        return lower.startsWith("._") || lower == "desktop.ini"
+    }
+
+    /**
+     * Folders that are safe to remove whole: index, trash and thumbnail caches that the OS
+     * that made them rebuilds on demand (Android regenerates `.thumbnails` itself).
+     */
+    fun isJunkFolder(name: String?): Boolean {
+        val lower = name?.lowercase() ?: return false
+        return lower == ".thumbnails" || lower == ".spotlight-v100" || lower == ".trashes" ||
+            lower == ".fseventsd" || lower.startsWith(".trash-")
+    }
+
+    /**
+     * Unfinished torrent pieces (qBittorrent `.!qB`, uTorrent `.!ut`). Only counted once
+     * untouched for [STALE_INCOMPLETE_DAYS], so a download that is still running is left alone.
+     * An unknown date (0) never counts as stale.
+     */
+    fun isStaleIncompleteDownload(name: String?, modified: Long, now: Long): Boolean {
+        val lower = name?.lowercase() ?: return false
+        if (!lower.endsWith(".!qb") && !lower.endsWith(".!ut")) return false
+        return modified > 0 && modified < now - TimeUnit.DAYS.toMillis(STALE_INCOMPLETE_DAYS)
+    }
+
+    /** Every file rule the temp-file sweep applies. */
+    fun isSweepableFile(name: String?, modified: Long, now: Long): Boolean =
+        isJunk(name) || isForeignMetadata(name) || isStaleIncompleteDownload(name, modified, now)
+
     /** Leftover app installers, worth reviewing for removal once the app is installed. */
     fun isInstaller(name: String?): Boolean {
         val lower = name?.lowercase() ?: return false
         return lower.endsWith(".apk") || lower.endsWith(".xapk") ||
             lower.endsWith(".apkm") || lower.endsWith(".obb")
     }
+
+    /** Plain APKs, the only installer format Android can read the package and version from. */
+    fun isApk(name: String?): Boolean = name?.lowercase()?.endsWith(".apk") == true
+
+    /** An installer is redundant once the installed app is at least the installer's version. */
+    fun isInstallerRedundant(archiveVersion: Long, installedVersion: Long?): Boolean =
+        installedVersion != null && installedVersion >= archiveVersion
+
+    const val STALE_INCOMPLETE_DAYS = 7L
 }
 
 class TeeVRepository(private val context: Context) {
@@ -278,24 +324,57 @@ class TeeVRepository(private val context: Context) {
             if (hasFullStorageAccess()) add(Environment.getExternalStorageDirectory())
         }
 
-        val publicMatches = publicRoots.distinct().flatMap { root ->
-            root.listFiles().orEmpty().filter { it.isFile }.mapNotNull { file ->
-                val size = file.length()
-                val modified = file.lastModified()
-                if (filter.matches(file.name, size, modified, now)) {
-                    FileSummary(file.name, file.parent.orEmpty(), size, modified, Uri.fromFile(file).toString())
-                } else {
-                    null
-                }
+        val publicFiles = publicRoots.distinct().flatMap { root ->
+            root.listFiles().orEmpty().filter { it.isFile }.map { file ->
+                FileSummary(file.name, file.parent.orEmpty(), file.length(), file.lastModified(), Uri.fromFile(file).toString())
             }
         }
 
         // Folders the user granted through the Storage Access Framework; entries here are deletable.
-        val safMatches = grantedSafFiles()
-            .filter { filter.matches(it.name, it.size, it.modified, now) }
-            .map { it.toSummary() }
+        val safFiles = grantedSafFiles().map { it.toSummary() }
 
-        (publicMatches + safMatches).distinctBy { it.uri }.sortedByDescending { it.size }
+        (publicFiles + safFiles)
+            .distinctBy { it.uri }
+            .mapNotNull { file ->
+                // APKs are checked against installed apps even when the filter wouldn't list them,
+                // so a redundant installer always shows up under "Already installed".
+                val checked = if (FileClassifier.isApk(file.name)) {
+                    file.copy(alreadyInstalled = isInstalledApk(file.uri))
+                } else {
+                    file
+                }
+                checked.takeIf { it.alreadyInstalled || filter.matches(it.name, it.size, it.modified, now) }
+            }
+            .sortedByDescending { it.size }
+    }
+
+    /**
+     * True when the APK behind [uriString] belongs to an app that is already installed at the
+     * same or a newer version. SAF documents have no file path, so they are read through their
+     * descriptor's /proc path. Any failure means "not known to be installed".
+     */
+    private fun isInstalledApk(uriString: String): Boolean = try {
+        val uri = uriString.toUri()
+        when (uri.scheme) {
+            "file" -> uri.path?.let { isInstalledArchive(it) } == true
+            "content" -> context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                isInstalledArchive("/proc/self/fd/${pfd.fd}")
+            } == true
+            else -> false
+        }
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun isInstalledArchive(path: String): Boolean {
+        val pm = context.packageManager
+        val archive = pm.getPackageArchiveInfo(path, 0) ?: return false
+        val installed = try {
+            PackageInfoCompat.getLongVersionCode(pm.getPackageInfo(archive.packageName, 0))
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        return FileClassifier.isInstallerRedundant(PackageInfoCompat.getLongVersionCode(archive), installed)
     }
 
     /** A document found while walking a granted SAF tree. */
@@ -502,20 +581,54 @@ class TeeVRepository(private val context: Context) {
         return true
     }
 
-    /** Removes obvious junk (temp/log/thumbnail files and empty folders) from granted SAF folders. */
+    /**
+     * Removes obvious junk from granted SAF folders: temp/log/thumbnail files, other computers'
+     * drive metadata (whole folders such as `.Trashes` included), stale torrent pieces, and
+     * folders left empty.
+     */
     suspend fun sweepJunk(): CleanupResult = withContext(Dispatchers.IO) {
         var freed = 0L
         var removed = 0
+        val now = System.currentTimeMillis()
         getCustomFolders().forEach { treeUriString ->
             val completeDirs = mutableSetOf<String>()
             val entries = walkSafTree(treeUriString, completeDirs)
+            val byId = entries.associateBy { it.documentId }
             // Children left in each folder, so a folder emptied by this sweep is removed as well.
             val remaining = entries.groupingBy { it.parentId }.eachCount().toMutableMap()
 
+            // Bytes under each folder, summed children-first (reversed breadth-first order).
+            val subtreeBytes = HashMap<String, Long>()
+            for (entry in entries.asReversed()) {
+                val own = if (entry.isFile) entry.size else subtreeBytes[entry.documentId] ?: 0L
+                subtreeBytes[entry.parentId] = (subtreeBytes[entry.parentId] ?: 0L) + own
+            }
+
+            // Junk folders go first, top-down, each in one delete with everything inside it.
+            val deletedDirs = mutableSetOf<String>()
+            fun insideDeleted(entry: SafEntry): Boolean {
+                var id: String? = entry.parentId
+                while (id != null) {
+                    if (id in deletedDirs) return true
+                    id = byId[id]?.parentId
+                }
+                return false
+            }
+            for (entry in entries) {
+                if (!entry.isDirectory || !FileClassifier.isJunkFolder(entry.name) || insideDeleted(entry)) continue
+                if (deleteDocument(entry.uri)) {
+                    deletedDirs += entry.documentId
+                    freed += subtreeBytes[entry.documentId] ?: 0L
+                    removed++
+                    remaining[entry.parentId] = (remaining[entry.parentId] ?: 1) - 1
+                }
+            }
+
             // The walk is breadth-first, so reversed it is deepest-first: children before their folder.
             for (entry in entries.asReversed()) {
+                if (entry.documentId in deletedDirs || insideDeleted(entry)) continue
                 val deleted = when {
-                    entry.isFile && FileClassifier.isJunk(entry.name) ->
+                    entry.isFile && FileClassifier.isSweepableFile(entry.name, entry.modified, now) ->
                         deleteDocument(entry.uri).also { if (it) freed += entry.size }
                     entry.isDirectory && entry.documentId in completeDirs && (remaining[entry.documentId] ?: 0) == 0 ->
                         deleteDocument(entry.uri)
@@ -529,6 +642,15 @@ class TeeVRepository(private val context: Context) {
         }
         CleanupResult(freed, removed).also { recordCleanup(it) }
     }
+
+    /** Free bytes on the data partition right now; used to measure what a system cleanup freed. */
+    fun freeBytes(): Long = dataPartitionSpace().second
+
+    /**
+     * Adds a cleanup done by Android itself (e.g. the clear-all-caches prompt) to the history.
+     * The system doesn't report an item count, so only the bytes are added.
+     */
+    fun recordSystemCleanup(freedBytes: Long) = recordCleanup(CleanupResult(freedBytes, 0))
 
     /** Opens the system "free up space" storage manager so the user can act device-wide. */
     fun openStorageManager() {

@@ -96,4 +96,47 @@ class CleanupLogicTest {
         assertEquals("1234-ABCD", folderDisplayName("content://com.android.externalstorage.documents/tree/1234-ABCD%3A"))
         assertEquals("not-a-tree", folderDisplayName("not-a-tree"))
     }
+
+    @Test
+    fun `foreign drive metadata is matched but similar names are not`() {
+        listOf("._movie.mp4", "._", "desktop.ini", "Desktop.INI").forEach { assertTrue(it, FileClassifier.isForeignMetadata(it)) }
+        listOf("_movie.mp4", ".hidden", "desktop.ini.txt", null).forEach { assertFalse("$it", FileClassifier.isForeignMetadata(it)) }
+    }
+
+    @Test
+    fun `junk folders cover os index trash and thumbnail caches`() {
+        listOf(".thumbnails", ".Spotlight-V100", ".Trashes", ".fseventsd", ".Trash-1000").forEach {
+            assertTrue(it, FileClassifier.isJunkFolder(it))
+        }
+        listOf("Trash", "thumbnails", ".trash", "Movies", null).forEach { assertFalse("$it", FileClassifier.isJunkFolder(it)) }
+    }
+
+    @Test
+    fun `torrent pieces only count once stale`() {
+        val day = 24L * 60 * 60 * 1000
+        val now = 100 * day
+        assertTrue(FileClassifier.isStaleIncompleteDownload("show.mkv.!qB", now - 8 * day, now))
+        assertTrue(FileClassifier.isStaleIncompleteDownload("show.mkv.!ut", now - 8 * day, now))
+        assertFalse(FileClassifier.isStaleIncompleteDownload("show.mkv.!qB", now - 1 * day, now))
+        assertFalse("unknown date is never stale", FileClassifier.isStaleIncompleteDownload("show.mkv.!qB", 0, now))
+        assertFalse(FileClassifier.isStaleIncompleteDownload("show.mkv", now - 8 * day, now))
+    }
+
+    @Test
+    fun `sweepable files combine all file rules`() {
+        val now = 100L * 24 * 60 * 60 * 1000
+        assertTrue(FileClassifier.isSweepableFile("a.tmp", now, now))
+        assertTrue(FileClassifier.isSweepableFile("._a.jpg", now, now))
+        assertFalse(FileClassifier.isSweepableFile("a.jpg", now, now))
+    }
+
+    @Test
+    fun `installer is redundant only when installed at same or newer version`() {
+        assertTrue(FileClassifier.isInstallerRedundant(archiveVersion = 10, installedVersion = 10))
+        assertTrue(FileClassifier.isInstallerRedundant(archiveVersion = 10, installedVersion = 12))
+        assertFalse("newer installer is an update", FileClassifier.isInstallerRedundant(archiveVersion = 12, installedVersion = 10))
+        assertFalse("not installed", FileClassifier.isInstallerRedundant(archiveVersion = 10, installedVersion = null))
+        assertTrue(FileClassifier.isApk("App.APK"))
+        assertFalse(FileClassifier.isApk("bundle.xapk"))
+    }
 }

@@ -29,6 +29,12 @@
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">TeeVClean Cache</string>
     <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
+    <string name="all_app_caches">All App Caches</string>
+    <string name="all_app_caches_desc">Android asks you to confirm, then clears every app\'s cache at once. App data stays intact.</string>
+    <string name="action_clear">Clear</string>
+    <string name="clear_caches_needs_access">Allow all-files access for TeeVClean first - Android requires it to clear every app\'s cache.</string>
+    <string name="clear_caches_unavailable">This device doesn\'t offer the clear-all-caches screen. Opening storage settings instead.</string>
+    <string name="app_caches_cleared">App caches cleared. Freed %1$s.</string>
     <string name="other_app_caches">Other Application Caches</string>
     <string name="other_app_caches_desc">Android requires each app\'s own info page.</string>
 
@@ -96,10 +102,10 @@
     <string name="action_review">Review</string>
     <string name="action_sweep">Sweep</string>
     <string name="temp_and_logs">Temporary/Log Files</string>
-    <string name="temp_and_logs_desc">Remove leftover temp, log and thumbnail files in the folders you added.</string>
+    <string name="temp_and_logs_desc">Remove temp, log and thumbnail files, other computers\' drive metadata and stale torrent pieces in the folders you added.</string>
     <string name="free_up_space">Open Android “Free up space”</string>
     <string name="delete">Delete</string>
-    <string name="confirm_sweep_desc">Remove leftover temp, log and thumbnail files, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
+    <string name="confirm_sweep_desc">Remove temp, log and thumbnail files, macOS/Windows/Linux drive metadata and trash folders (._ files, desktop.ini, .Trashes, .Trash-*), torrent pieces untouched for 7 days, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Clean-up</string>
     <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included - never your files or other apps\' caches.</string>
     <string name="schedule_frequency_label">How often</string>
@@ -125,6 +131,8 @@
     </plurals>
 
     <string name="filter_installers">Installers</string>
+    <string name="filter_already_installed">Already installed</string>
+    <string name="installed_suffix">%1$s · app already installed</string>
     <string name="select_all">Select all</string>
     <string name="clear_selection">Clear</string>
     <string name="delete_selected">Delete selected (%1$d)</string>
