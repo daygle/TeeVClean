@@ -13,9 +13,11 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Builds a 24dp navigation glyph from an SVG path string.
@@ -267,6 +269,19 @@ class TeeVViewModel(
     }
 
     fun openStorageManager() = repository.openStorageManager()
+
+    fun freeBytes(): Long = repository.freeBytes()
+
+    /** Records what Android's clear-all-caches prompt freed, measured against [freeBefore]. */
+    fun onSystemCachesCleared(freeBefore: Long, onComplete: (Long) -> Unit) {
+        viewModelScope.launch {
+            val freed = withContext(Dispatchers.IO) {
+                (repository.freeBytes() - freeBefore).coerceAtLeast(0L).also { repository.recordSystemCleanup(it) }
+            }
+            refreshData()
+            onComplete(freed)
+        }
+    }
 
     fun setSchedule(frequency: CleanupFrequency, includeSweep: Boolean) {
         repository.setCleanupSchedule(frequency, includeSweep)

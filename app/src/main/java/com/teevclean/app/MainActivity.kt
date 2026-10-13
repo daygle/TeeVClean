@@ -9,8 +9,10 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Process
 import android.os.SystemClock
+import android.os.storage.StorageManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -18,6 +20,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -85,6 +88,17 @@ class MainActivity : ComponentActivity() {
         viewModel.addCustomFolder(uri.toString())
     }
 
+    /** Free space just before the clear-all-caches prompt opened, to report what it freed. */
+    private var freeBeforeCacheClear = 0L
+
+    private val clearCachesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            viewModel.onSystemCachesCleared(freeBeforeCacheClear) { freed ->
+                Toast.makeText(this, getString(R.string.app_caches_cleared, formatBytes(freed)), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
             viewModel.refreshData()
@@ -105,6 +119,7 @@ class MainActivity : ComponentActivity() {
                 },
                 // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
                 onAddFolder = ::pickFolder,
+                onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ::clearAllAppCaches else null,
             )
         }
     }
@@ -119,6 +134,27 @@ class MainActivity : ComponentActivity() {
             } else {
                 storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
             }
+        }
+    }
+
+    /**
+     * Opens Android's own "clear all app caches" confirmation (Android 11+). Android only offers
+     * it to apps holding all-files access, so that is requested first when missing.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun clearAllAppCaches() {
+        if (!Environment.isExternalStorageManager()) {
+            Toast.makeText(this, R.string.clear_caches_needs_access, Toast.LENGTH_LONG).show()
+            openAllFilesAccessSettings()
+            return
+        }
+        freeBeforeCacheClear = viewModel.freeBytes()
+        try {
+            clearCachesLauncher.launch(Intent(StorageManager.ACTION_CLEAR_APP_CACHE))
+        } catch (_: Exception) {
+            // ActivityNotFoundException on TVs without the screen; SecurityException if access was just revoked.
+            Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
+            viewModel.openStorageManager()
         }
     }
 
@@ -142,7 +178,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, onAddFolder: () -> Unit) {
+fun TeeVCleanApp(
+    viewModel: TeeVViewModel,
+    onRequestStorageAccess: () -> Unit,
+    onAddFolder: () -> Unit,
+    onClearAllCaches: (() -> Unit)?,
+) {
     var showCleanup by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showSweep by remember { mutableStateOf(false) }
@@ -226,6 +267,7 @@ fun TeeVCleanApp(viewModel: TeeVViewModel, onRequestStorageAccess: () -> Unit, o
                                 onSweep = { showSweep = true },
                                 onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
                                 onFreeUpSpace = { viewModel.openStorageManager() },
+                                onClearAllCaches = onClearAllCaches,
                                 onNavigate = { viewModel.currentScreen = it },
                             )
                             Screen.LARGE -> {
@@ -358,6 +400,7 @@ private fun CleanupScreen(
     onSweep: () -> Unit,
     onFindDuplicates: () -> Unit,
     onFreeUpSpace: () -> Unit,
+    onClearAllCaches: (() -> Unit)?,
     onNavigate: (Screen) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -373,6 +416,16 @@ private fun CleanupScreen(
                 formatBytes(cacheSize),
                 onClick = onReview
             )
+        }
+        if (onClearAllCaches != null) {
+            item {
+                ActionRow(
+                    stringResource(R.string.all_app_caches),
+                    stringResource(R.string.all_app_caches_desc),
+                    stringResource(R.string.action_clear),
+                    onClick = onClearAllCaches,
+                )
+            }
         }
         item {
             ActionRow(
@@ -422,7 +475,7 @@ private fun LargeFilesScreen(
     onUpdateFilter: (FileFilter) -> Unit,
     onDeleteMany: (List<FileSummary>) -> Unit,
 ) {
-    var activeFilters by remember { mutableStateOf(setOf(0, 1, 2)) }
+    var activeFilters by remember { mutableStateOf(setOf(0, 1, 2, 3)) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var showConfirm by remember { mutableStateOf(false) }
     var showFilterSettings by remember { mutableStateOf(false) }
@@ -434,7 +487,8 @@ private fun LargeFilesScreen(
         files.filter { file ->
             (0 in activeFilters && filter.isLarge(file.size)) ||
                 (1 in activeFilters && filter.isOld(file.modified, now)) ||
-                (2 in activeFilters && filter.isListedInstaller(file.name))
+                (2 in activeFilters && filter.isListedInstaller(file.name)) ||
+                (3 in activeFilters && file.alreadyInstalled)
         }
     }
 
@@ -489,6 +543,9 @@ private fun LargeFilesScreen(
             if (filter.showInstallers) {
                 filterOptions.add(stringResource(R.string.filter_installers) to 2)
             }
+            if (files.any { it.alreadyInstalled }) {
+                filterOptions.add(stringResource(R.string.filter_already_installed) to 3)
+            }
 
             filterOptions.forEach { (label, index) ->
                 SelectableChip(
@@ -518,7 +575,8 @@ private fun LargeFilesScreen(
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                 items(filteredFiles, key = { it.uri }) { file ->
-                    SelectableFileRow(file.name, file.path, formatBytes(file.size), file.uri in selected) {
+                    val subtitle = if (file.alreadyInstalled) stringResource(R.string.installed_suffix, file.path) else file.path
+                    SelectableFileRow(file.name, subtitle, formatBytes(file.size), file.uri in selected) {
                         selected = if (file.uri in selected) selected - file.uri else selected + file.uri
                     }
                 }
