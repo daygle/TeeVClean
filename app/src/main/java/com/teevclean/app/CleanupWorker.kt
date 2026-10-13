@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 
 class CleanupWorker(
     appContext: Context,
@@ -18,6 +19,8 @@ class CleanupWorker(
                 repository.sweepJunk()
             }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("CleanupWorker", "Error during scheduled cleanup", e)
             Result.retry()

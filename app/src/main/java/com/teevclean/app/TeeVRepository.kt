@@ -5,17 +5,20 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.StatFs
 import android.os.storage.StorageManager
+import android.provider.DocumentsContract
+import android.provider.DocumentsContract.Document
 import android.provider.Settings
-import androidx.annotation.RequiresPermission
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import androidx.documentfile.provider.DocumentFile
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -26,6 +29,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.concurrent.TimeUnit
@@ -86,11 +91,24 @@ data class StorageBreakdown(
 /** Running totals for the cleanup-history card. */
 data class CleanupHistory(val lastRun: Long, val totalFreedBytes: Long, val totalItems: Int)
 
+/** Which files the Files screen lists: anything large, old, or (optionally) a leftover installer. */
 data class FileFilter(
     val minSize: Long = 500L * 1024 * 1024,
     val minAgeDays: Int = 30,
-    val showInstallers: Boolean = true
-)
+    val showInstallers: Boolean = true,
+) {
+    /** Files last modified before this instant count as old. */
+    fun ageCutoff(now: Long): Long = now - TimeUnit.DAYS.toMillis(minAgeDays.toLong())
+
+    fun isLarge(size: Long): Boolean = size >= minSize
+
+    fun isOld(modified: Long, now: Long): Boolean = modified < ageCutoff(now)
+
+    fun isListedInstaller(name: String?): Boolean = showInstallers && FileClassifier.isInstaller(name)
+
+    fun matches(name: String?, size: Long, modified: Long, now: Long): Boolean =
+        isLarge(size) || isOld(modified, now) || isListedInstaller(name)
+}
 
 /** Pure filename rules for cleanup, extracted so they can be unit-tested without Android. */
 object FileClassifier {
@@ -115,35 +133,74 @@ class TeeVRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("teevclean_prefs", Context.MODE_PRIVATE)
 
     fun getCustomFolders(): List<String> =
-        prefs.getStringSet("custom_folders", emptySet())?.toList() ?: emptyList()
+        prefs.getStringSet(KEY_CUSTOM_FOLDERS, emptySet()).orEmpty().toList()
 
     fun addCustomFolder(uri: String) {
-        val folders = getCustomFolders().toMutableSet()
-        folders.add(uri)
-        prefs.edit { putStringSet("custom_folders", folders) }
+        prefs.edit { putStringSet(KEY_CUSTOM_FOLDERS, getCustomFolders().toSet() + uri) }
     }
 
+    /** Forgets a folder and releases its persisted grant, which otherwise counts toward the system cap. */
     fun removeCustomFolder(uri: String) {
-        val folders = getCustomFolders().toMutableSet()
-        folders.remove(uri)
-        prefs.edit { putStringSet("custom_folders", folders) }
+        prefs.edit { putStringSet(KEY_CUSTOM_FOLDERS, getCustomFolders().toSet() - uri) }
+        try {
+            context.contentResolver.releasePersistableUriPermission(
+                uri.toUri(),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        } catch (_: Exception) {
+            // The grant was already revoked or never persisted.
+        }
     }
 
     fun hasFullStorageAccess(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
         } else {
-            androidx.core.content.ContextCompat.checkSelfPermission(
+            ContextCompat.checkSelfPermission(
                 context,
-                android.Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+            ) == PackageManager.PERMISSION_GRANTED
         }
     }
 
-    suspend fun readStorage(): StorageSummary = withContext(Dispatchers.IO) {
+    /** Total and available bytes of the data partition. */
+    private fun dataPartitionSpace(): Pair<Long, Long> {
         val stat = StatFs(Environment.getDataDirectory().path)
-        val total = stat.blockCountLong * stat.blockSizeLong
-        StorageSummary((total - stat.availableBytes).coerceIn(0L, total), total)
+        return stat.totalBytes to stat.availableBytes
+    }
+
+    suspend fun readStorage(): StorageSummary = withContext(Dispatchers.IO) {
+        val (total, free) = dataPartitionSpace()
+        StorageSummary((total - free).coerceIn(0L, total), total)
+    }
+
+    /** Installed apps the user can remove, excluding system apps and TeeVClean itself. */
+    private fun userApps(): List<ApplicationInfo> =
+        context.packageManager.getInstalledApplications(0)
+            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
+
+    private fun storageStatsManager(): StorageStatsManager? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.getSystemService(StorageStatsManager::class.java)
+        } else {
+            null
+        }
+
+    private class PackageBytes(val total: Long, val cache: Long)
+
+    /**
+     * Real footprint of an app (installed code + data, cache included) via StorageStatsManager.
+     * Null when unavailable: below API 26, or without usage access for other packages.
+     */
+    private fun packageBytes(statsManager: StorageStatsManager?, packageName: String): PackageBytes? {
+        if (statsManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        return try {
+            val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, packageName, Process.myUserHandle())
+            // dataBytes already includes cacheBytes, so cache is not added on top.
+            PackageBytes(stats.appBytes + stats.dataBytes, stats.cacheBytes)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -151,38 +208,24 @@ class TeeVRepository(private val context: Context) {
      * App attribution needs usage access + API 26; without it [StorageBreakdown.appDataKnown] is
      * false and only total/free are meaningful.
      */
-    suspend fun storageBreakdown(): StorageBreakdown = coroutineScope {
-        withContext(Dispatchers.IO) {
-            val stat = StatFs(Environment.getDataDirectory().path)
-            val total = stat.blockCountLong * stat.blockSizeLong
-            val free = stat.availableBytes
-            val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.getSystemService(StorageStatsManager::class.java)
-            } else {
-                null
-            }
+    suspend fun storageBreakdown(): StorageBreakdown = withContext(Dispatchers.IO) {
+        val (total, free) = dataPartitionSpace()
+        val statsManager = storageStatsManager()
+            ?: return@withContext StorageBreakdown(total, free, 0L, 0L, false)
 
-            if (statsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val appStats = context.packageManager.getInstalledApplications(0)
-                    .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
-                    .map { app ->
-                        async {
-                            try {
-                                val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, app.packageName, Process.myUserHandle())
-                                stats.appBytes + stats.dataBytes + stats.cacheBytes to stats.cacheBytes
-                            } catch (_: Exception) {
-                                0L to 0L
-                            }
-                        }
-                    }.awaitAll()
+        val apps = userApps()
+        val perApp = coroutineScope {
+            apps.map { app -> async { packageBytes(statsManager, app.packageName) } }.awaitAll()
+        }.filterNotNull()
 
-                val appsBytes = appStats.sumOf { it.first }
-                val cacheBytes = appStats.sumOf { it.second }
-                StorageBreakdown(total, free, appsBytes, cacheBytes, true)
-            } else {
-                StorageBreakdown(total, free, 0L, 0L, false)
-            }
-        }
+        StorageBreakdown(
+            totalBytes = total,
+            freeBytes = free,
+            appsBytes = perApp.sumOf { it.total },
+            appCacheBytes = perApp.sumOf { it.cache },
+            // Every query fails without usage access; report that instead of a misleading 0 B.
+            appDataKnown = perApp.isNotEmpty() || apps.isEmpty(),
+        )
     }
 
     fun getCleanupHistory(): CleanupHistory = CleanupHistory(
@@ -204,7 +247,7 @@ class TeeVRepository(private val context: Context) {
         listOfNotNull(context.cacheDir, context.codeCacheDir, context.externalCacheDir)
 
     suspend fun getCacheSize(): Long = withContext(Dispatchers.IO) {
-        ownCacheDirs().sumOf { iterativeFolderSize(it) }
+        ownCacheDirs().sumOf { folderSize(it) }
     }
 
     suspend fun clearOwnCache(): CleanupResult = withContext(Dispatchers.IO) {
@@ -212,7 +255,7 @@ class TeeVRepository(private val context: Context) {
         var removed = 0
         ownCacheDirs().forEach { dir ->
             dir.listFiles()?.forEach { entry ->
-                val entrySize = iterativeFolderSize(entry)
+                val entrySize = folderSize(entry)
                 if (entry.deleteRecursively()) {
                     freed += entrySize
                     removed++
@@ -224,92 +267,155 @@ class TeeVRepository(private val context: Context) {
 
     suspend fun scanLargeFiles(): List<FileSummary> = withContext(Dispatchers.IO) {
         val filter = getFileFilter()
-        val cutoff = System.currentTimeMillis() - filter.minAgeDays.toLong() * 24 * 60 * 60 * 1000
-        val largeFileBytes = filter.minSize
+        val now = System.currentTimeMillis()
 
         // Public storage roots read directly (works where the app has legacy/all-files access).
-        val publicRoots = mutableListOf(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-        )
-        // If the user granted full storage access (legacy or MANAGE_EXTERNAL_STORAGE), scan everything.
-        if (hasFullStorageAccess()) {
-            publicRoots.add(Environment.getExternalStorageDirectory())
+        val publicRoots = buildList {
+            add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
+            add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
+            add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
+            // With full storage access (legacy or MANAGE_EXTERNAL_STORAGE), include the storage root too.
+            if (hasFullStorageAccess()) add(Environment.getExternalStorageDirectory())
         }
 
         val publicMatches = publicRoots.distinct().flatMap { root ->
-            if (root.exists() && root.isDirectory) {
-                root.listFiles()
-                    ?.filter { it.isFile && (it.length() >= largeFileBytes || it.lastModified() < cutoff || (filter.showInstallers && isInstaller(it.name))) }
-                    ?.map { FileSummary(it.name, it.parent.orEmpty(), it.length(), it.lastModified(), Uri.fromFile(it).toString()) }
-                    .orEmpty()
-            } else emptyList()
+            root.listFiles().orEmpty().filter { it.isFile }.mapNotNull { file ->
+                val size = file.length()
+                val modified = file.lastModified()
+                if (filter.matches(file.name, size, modified, now)) {
+                    FileSummary(file.name, file.parent.orEmpty(), size, modified, Uri.fromFile(file).toString())
+                } else {
+                    null
+                }
+            }
         }
 
         // Folders the user granted through the Storage Access Framework; entries here are deletable.
-        val safMatches = getCustomFolders().flatMap { uriString ->
-            walkSafTree(uriString) { doc ->
-                doc.length() >= largeFileBytes || doc.lastModified() < cutoff || (filter.showInstallers && isInstaller(doc.name))
-            }
-        }
+        val safMatches = grantedSafFiles()
+            .filter { filter.matches(it.name, it.size, it.modified, now) }
+            .map { it.toSummary() }
 
-        (publicMatches + safMatches).sortedByDescending { it.size }
+        (publicMatches + safMatches).distinctBy { it.uri }.sortedByDescending { it.size }
+    }
+
+    /** A document found while walking a granted SAF tree. */
+    private class SafEntry(
+        val uri: Uri,
+        val documentId: String,
+        val parentId: String,
+        val name: String,
+        val parentName: String,
+        val mimeType: String?,
+        val size: Long,
+        val modified: Long,
+    ) {
+        val isDirectory: Boolean get() = mimeType == Document.MIME_TYPE_DIR
+        val isFile: Boolean get() = !isDirectory && !mimeType.isNullOrEmpty()
+
+        /** Same document reached through overlapping trees (a folder and its sub-folder) shares this. */
+        val identity: String get() = "${uri.authority}/$documentId"
+
+        fun toSummary() = FileSummary(name, parentName, size, modified, uri.toString())
     }
 
     /**
-     * Bounded breadth-first walk over a SAF tree, returning files that match [predicate].
-     * The node cap keeps a pathological folder tree from stalling the scan.
+     * Bounded breadth-first walk over a granted SAF tree. Each directory is listed with one
+     * DocumentsContract query returning name, type, size and date together, instead of the
+     * several IPC round-trips per file that DocumentFile needs. [MAX_SCAN_NODES] keeps a
+     * pathological tree from stalling the scan; [completeDirs], when given, receives the ids of
+     * directories whose children were all listed.
      */
-    private fun walkSafTree(treeUriString: String, predicate: (DocumentFile) -> Boolean): List<FileSummary> {
-        val root = try {
-            DocumentFile.fromTreeUri(context, treeUriString.toUri())
+    private fun walkSafTree(treeUriString: String, completeDirs: MutableSet<String>? = null): List<SafEntry> {
+        val treeUri = treeUriString.toUri()
+        val rootId = try {
+            DocumentsContract.getTreeDocumentId(treeUri)
         } catch (_: Exception) {
-            null
-        } ?: return emptyList()
-
-        val matches = mutableListOf<FileSummary>()
-        val queue = ArrayDeque<DocumentFile>()
-        queue.add(root)
-        var visited = 0
-        while (queue.isNotEmpty() && visited < MAX_SCAN_NODES) {
-            val dir = queue.removeFirst()
-            for (child in dir.listFiles()) {
-                visited++
-                if (child.isDirectory) {
-                    queue.add(child)
-                } else if (child.isFile && predicate(child)) {
-                    matches.add(
-                        FileSummary(
-                            name = child.name ?: "unknown",
-                            path = dir.name ?: root.name.orEmpty(),
-                            size = child.length(),
-                            modified = child.lastModified(),
-                            uri = child.uri.toString(),
-                        )
-                    )
-                }
-                if (visited >= MAX_SCAN_NODES) break
-            }
+            return emptyList()
         }
-        return matches
+
+        val resolver = context.contentResolver
+        val entries = mutableListOf<SafEntry>()
+        val queue = ArrayDeque<Pair<String, String>>()
+        queue.add(rootId to documentName(treeUri, rootId).orEmpty())
+        while (queue.isNotEmpty() && entries.size < MAX_SCAN_NODES) {
+            val (dirId, dirName) = queue.removeFirst()
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, dirId)
+            val listedAll = try {
+                resolver.query(childrenUri, SAF_PROJECTION, null, null, null)?.use { cursor ->
+                    var complete = true
+                    while (cursor.moveToNext()) {
+                        if (entries.size >= MAX_SCAN_NODES) {
+                            complete = false
+                            break
+                        }
+                        val id = cursor.getString(0) ?: continue
+                        val entry = SafEntry(
+                            uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, id),
+                            documentId = id,
+                            parentId = dirId,
+                            name = cursor.getString(1) ?: "unknown",
+                            parentName = dirName,
+                            mimeType = cursor.getString(2),
+                            size = if (cursor.isNull(3)) 0L else cursor.getLong(3),
+                            modified = if (cursor.isNull(4)) 0L else cursor.getLong(4),
+                        )
+                        entries.add(entry)
+                        if (entry.isDirectory) queue.add(id to entry.name)
+                    }
+                    complete
+                } ?: false
+            } catch (_: Exception) {
+                false
+            }
+            if (listedAll) completeDirs?.add(dirId)
+        }
+        return entries
+    }
+
+    private fun documentName(treeUri: Uri, documentId: String): String? = try {
+        context.contentResolver.query(
+            DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId),
+            arrayOf(Document.COLUMN_DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { if (it.moveToFirst()) it.getString(0) else null }
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Every file in the granted folders, each listed once even when the user added both a
+     * folder and one of its sub-folders. Without that, the same file would show up twice and
+     * be offered as its own "duplicate".
+     */
+    private fun grantedSafFiles(): List<SafEntry> =
+        getCustomFolders()
+            .flatMap { walkSafTree(it) }
+            .filter { it.isFile }
+            .distinctBy { it.identity }
+
+    private fun deleteDocument(uri: Uri): Boolean = try {
+        DocumentsContract.deleteDocument(context.contentResolver, uri)
+    } catch (_: Exception) {
+        false
     }
 
     /** Deletes a single scanned file by its handle. Content Uris use SAF; file Uris use direct IO. */
-    suspend fun deleteFile(uriString: String): Boolean = withContext(Dispatchers.IO) {
+    private fun deleteFile(uriString: String): Boolean {
         val uri = try {
             uriString.toUri()
         } catch (_: Exception) {
-            return@withContext false
+            return false
         }
-        try {
-            when (uri.scheme) {
-                "content" -> DocumentFile.fromSingleUri(context, uri)?.delete() == true
-                "file" -> uri.path?.let { File(it).delete() } == true
-                else -> false
+        return when (uri.scheme) {
+            "content" -> deleteDocument(uri)
+            "file" -> try {
+                uri.path?.let { File(it).delete() } == true
+            } catch (_: Exception) {
+                false
             }
-        } catch (_: Exception) {
-            false
+            else -> false
         }
     }
 
@@ -328,47 +434,72 @@ class TeeVRepository(private val context: Context) {
 
     /**
      * Finds groups of files that look identical, within the folders the user granted.
-     * Files are grouped by exact size and then by a content fingerprint (SHA-256 of the
-     * first [FINGERPRINT_BYTES]), which is fast and a strong signal for real-world media
-     * and documents. Deletion is always user-confirmed, so the fingerprint heuristic is safe.
+     * Files are grouped by exact size and then by a content fingerprint (see [fileFingerprint]).
+     * Deletion is always user-confirmed.
      */
-    suspend fun scanDuplicates(): List<DuplicateGroup> = coroutineScope {
-        withContext(Dispatchers.IO) {
-            val candidates = getCustomFolders().flatMap { uriString ->
-                walkSafTree(uriString) { doc -> doc.length() >= MIN_DUPLICATE_BYTES }
-            }
-            candidates
-                .groupBy { it.size }
-                .filterValues { it.size > 1 }
-                .flatMap { (size, sameSize) ->
-                    sameSize
-                        .map { file -> async { fileFingerprint(file.uri) to file } }
-                        .awaitAll()
-                        .groupBy({ it.first }, { it.second })
-                        .filterKeys { it != null }
-                        .values
-                        .filter { it.size > 1 }
-                        .map { group -> DuplicateGroup(group.sortedByDescending { it.modified }, size) }
-                }
-                .sortedByDescending { it.reclaimableBytes }
+    suspend fun scanDuplicates(): List<DuplicateGroup> = withContext(Dispatchers.IO) {
+        val sameSize = grantedSafFiles()
+            .filter { it.size >= MIN_DUPLICATE_BYTES }
+            .map { it.toSummary() }
+            .groupBy { it.size }
+            .values
+            .filter { it.size > 1 }
+            .flatten()
+
+        val fingerprinted = coroutineScope {
+            sameSize.map { file -> async { fileFingerprint(file)?.let { (file.size to it) to file } } }.awaitAll()
         }
+
+        fingerprinted
+            .filterNotNull()
+            .groupBy({ it.first }, { it.second })
+            .values
+            .filter { it.size > 1 }
+            .map { group -> DuplicateGroup(group.sortedByDescending { it.modified }, group.first().size) }
+            .sortedByDescending { it.reclaimableBytes }
     }
 
-    private fun fileFingerprint(uriString: String): String? = try {
-        context.contentResolver.openInputStream(uriString.toUri())?.use { input ->
-            val digest = MessageDigest.getInstance("SHA-256")
-            val buffer = ByteArray(64 * 1024)
-            var total = 0
-            while (total < FINGERPRINT_BYTES) {
-                val read = input.read(buffer, 0, minOf(buffer.size, FINGERPRINT_BYTES - total))
-                if (read <= 0) break
-                digest.update(buffer, 0, read)
-                total += read
+    /**
+     * SHA-256 over the first and last [FINGERPRINT_BYTES] of a file (the whole file when it is
+     * smaller). Sampling both ends, on top of the exact size match, keeps hashing fast without
+     * matching files that merely share a common header. Returns null when the file can't be
+     * read as reported, which excludes it from duplicate detection rather than risk a false match.
+     */
+    private fun fileFingerprint(file: FileSummary): String? = try {
+        context.contentResolver.openFileDescriptor(file.uri.toUri(), "r")?.let { pfd ->
+            ParcelFileDescriptor.AutoCloseInputStream(pfd).use { stream ->
+                val channel = stream.channel
+                val size = channel.size()
+                if (size != file.size) return@use null
+                val digest = MessageDigest.getInstance("SHA-256")
+                val head = minOf(size, FINGERPRINT_BYTES)
+                if (!digestRange(channel, 0, head, digest)) return@use null
+                if (size > head) {
+                    val tailStart = maxOf(head, size - FINGERPRINT_BYTES)
+                    if (!digestRange(channel, tailStart, size - tailStart, digest)) return@use null
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
             }
-            digest.digest().joinToString("") { "%02x".format(it) }
         }
     } catch (_: Exception) {
         null
+    }
+
+    /** Feeds [length] bytes from [start] into [digest]; false if the file ended early. */
+    private fun digestRange(channel: FileChannel, start: Long, length: Long, digest: MessageDigest): Boolean {
+        val buffer = ByteBuffer.allocate(64 * 1024)
+        val end = start + length
+        var position = start
+        while (position < end) {
+            buffer.clear()
+            buffer.limit(minOf(buffer.capacity().toLong(), end - position).toInt())
+            val read = channel.read(buffer, position)
+            if (read <= 0) return false
+            buffer.flip()
+            digest.update(buffer)
+            position += read
+        }
+        return true
     }
 
     /** Removes obvious junk (temp/log/thumbnail files and empty folders) from granted SAF folders. */
@@ -376,46 +507,28 @@ class TeeVRepository(private val context: Context) {
         var freed = 0L
         var removed = 0
         getCustomFolders().forEach { treeUriString ->
-            val root = try {
-                DocumentFile.fromTreeUri(context, treeUriString.toUri())
-            } catch (_: Exception) {
-                null
-            } ?: return@forEach
+            val completeDirs = mutableSetOf<String>()
+            val entries = walkSafTree(treeUriString, completeDirs)
+            // Children left in each folder, so a folder emptied by this sweep is removed as well.
+            val remaining = entries.groupingBy { it.parentId }.eachCount().toMutableMap()
 
-            // Deepest-first so a folder is only empty-checked after its children are handled.
-            val ordered = collectSafNodes(root)
-            for (doc in ordered.asReversed()) {
-                if (doc.isFile && isJunk(doc.name)) {
-                    val size = doc.length()
-                    if (doc.delete()) { freed += size; removed++ }
-                } else if (doc.isDirectory && doc.uri != root.uri && doc.listFiles().isEmpty()) {
-                    if (doc.delete()) removed++
+            // The walk is breadth-first, so reversed it is deepest-first: children before their folder.
+            for (entry in entries.asReversed()) {
+                val deleted = when {
+                    entry.isFile && FileClassifier.isJunk(entry.name) ->
+                        deleteDocument(entry.uri).also { if (it) freed += entry.size }
+                    entry.isDirectory && entry.documentId in completeDirs && (remaining[entry.documentId] ?: 0) == 0 ->
+                        deleteDocument(entry.uri)
+                    else -> false
+                }
+                if (deleted) {
+                    removed++
+                    remaining[entry.parentId] = (remaining[entry.parentId] ?: 1) - 1
                 }
             }
         }
         CleanupResult(freed, removed).also { recordCleanup(it) }
     }
-
-    private fun collectSafNodes(root: DocumentFile): List<DocumentFile> {
-        val nodes = mutableListOf<DocumentFile>()
-        val queue = ArrayDeque<DocumentFile>()
-        queue.add(root)
-        var visited = 0
-        while (queue.isNotEmpty() && visited < MAX_SCAN_NODES) {
-            val dir = queue.removeFirst()
-            for (child in dir.listFiles()) {
-                visited++
-                nodes.add(child)
-                if (child.isDirectory) queue.add(child)
-                if (visited >= MAX_SCAN_NODES) break
-            }
-        }
-        return nodes
-    }
-
-    private fun isJunk(name: String?): Boolean = FileClassifier.isJunk(name)
-
-    private fun isInstaller(name: String?): Boolean = FileClassifier.isInstaller(name)
 
     /** Opens the system "free up space" storage manager so the user can act device-wide. */
     fun openStorageManager() {
@@ -423,76 +536,46 @@ class TeeVRepository(private val context: Context) {
             Intent(StorageManager.ACTION_MANAGE_STORAGE)
         } else {
             Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
-        }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val fallback = Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(primary)
-        } catch (_: Exception) {
-            try {
-                context.startActivity(fallback)
-            } catch (_: Exception) {
-                // No storage settings activity available on this device.
-            }
+        }
+        if (!startActivitySafely(primary)) {
+            startActivitySafely(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS))
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS)
-    private fun readLastUsedByPackage(usage: UsageStatsManager?, since: Long): Map<String, Long> =
-        usage?.queryUsageStats(UsageStatsManager.INTERVAL_MONTHLY, since, System.currentTimeMillis())
-            ?.associate { it.packageName to it.lastTimeUsed }
-            .orEmpty()
-
-    suspend fun loadApps(): List<AppSummary> = coroutineScope {
-        withContext(Dispatchers.IO) {
-            val pm = context.packageManager
-            val usage = context.getSystemService(UsageStatsManager::class.java)
-            val since = System.currentTimeMillis() - 180L * 24 * 60 * 60 * 1000
-            val lastUsed = try {
-                readLastUsedByPackage(usage, since)
-            } catch (_: SecurityException) {
-                emptyMap()
-            }
-
-            val statsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.getSystemService(StorageStatsManager::class.java)
-            } else {
-                null
-            }
-
-            pm.getInstalledApplications(0)
-                .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
-                .map { app ->
-                    async {
-                        val apkBytes = File(app.sourceDir ?: "").length()
-                        AppSummary(
-                            app.loadLabel(pm).toString(),
-                            app.packageName,
-                            appStorageBytes(statsManager, app.packageName, apkBytes),
-                            lastUsed[app.packageName] ?: 0L
-                        )
-                    }
-                }.awaitAll().sortedByDescending { it.size }
-        }
-    }
-
-    /**
-     * Real footprint of an app: installed code + data + cache, via StorageStatsManager
-     * (needs usage access, API 26+). Falls back to the APK size when unavailable, so the
-     * value is never worse than the old estimate.
-     */
-    private fun appStorageBytes(statsManager: StorageStatsManager?, packageName: String, fallbackApk: Long): Long {
-        if (statsManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return fallbackApk
+    /** Most recent use of each package over the last [LAST_USED_WINDOW_DAYS]; empty without usage access. */
+    private fun readLastUsedByPackage(): Map<String, Long> {
+        val usage = context.getSystemService(UsageStatsManager::class.java) ?: return emptyMap()
+        val now = System.currentTimeMillis()
         return try {
-            val stats = statsManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, packageName, Process.myUserHandle())
-            stats.appBytes + stats.dataBytes + stats.cacheBytes
-        } catch (_: Exception) {
-            fallbackApk
+            // Aggregation merges the per-interval buckets and keeps the latest lastTimeUsed per package.
+            usage.queryAndAggregateUsageStats(now - TimeUnit.DAYS.toMillis(LAST_USED_WINDOW_DAYS), now)
+                .mapValues { it.value.lastTimeUsed }
+        } catch (_: SecurityException) {
+            emptyMap()
         }
+    }
+
+    suspend fun loadApps(): List<AppSummary> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        val lastUsed = readLastUsedByPackage()
+        val statsManager = storageStatsManager()
+
+        coroutineScope {
+            userApps().map { app ->
+                async {
+                    // Fall back to the APK size when the full footprint is unavailable.
+                    val size = packageBytes(statsManager, app.packageName)?.total
+                        ?: app.sourceDir?.let { File(it).length() }
+                        ?: 0L
+                    AppSummary(app.loadLabel(pm).toString(), app.packageName, size, lastUsed[app.packageName] ?: 0L)
+                }
+            }.awaitAll()
+        }.sortedByDescending { it.size }
     }
 
     fun getCleanupFrequency(): CleanupFrequency =
         runCatching {
-            CleanupFrequency.valueOf(prefs.getString(KEY_FREQUENCY, CleanupFrequency.OFF.name)!!)
+            CleanupFrequency.valueOf(prefs.getString(KEY_FREQUENCY, null) ?: CleanupFrequency.OFF.name)
         }.getOrDefault(CleanupFrequency.OFF)
 
     fun isScheduledSweepEnabled(): Boolean = prefs.getBoolean(KEY_INCLUDE_SWEEP, false)
@@ -511,86 +594,61 @@ class TeeVRepository(private val context: Context) {
         val manager = WorkManager.getInstance(context)
         val intervalDays = frequency.intervalDays
         if (intervalDays == null) {
-            manager.cancelUniqueWork(WEEKLY_CLEANUP_WORK)
+            manager.cancelUniqueWork(CLEANUP_WORK)
         } else {
             val request = PeriodicWorkRequestBuilder<CleanupWorker>(intervalDays, TimeUnit.DAYS)
                 .setInputData(workDataOf(INCLUDE_SWEEP to includeSweep))
                 .build()
-            manager.enqueueUniquePeriodicWork(
-                WEEKLY_CLEANUP_WORK,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                request,
-            )
+            manager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 
     fun openAppInfo(packageName: String) {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            // Intent not supported or package missing.
-        }
+        startActivitySafely(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
     }
 
     /** Launches the system uninstall prompt for a package. The user confirms the removal. */
     fun uninstallApp(packageName: String) {
-        val intent = Intent(Intent.ACTION_DELETE, "package:$packageName".toUri())
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (_: Exception) {
+        if (!startActivitySafely(Intent(Intent.ACTION_DELETE, "package:$packageName".toUri()))) {
             openAppInfo(packageName)
         }
     }
 
+    private fun startActivitySafely(intent: Intent): Boolean = try {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (_: Exception) {
+        // No activity handles this intent on this device.
+        false
+    }
+
     fun getFileFilter(): FileFilter {
+        val defaults = FileFilter()
         return FileFilter(
-            minSize = prefs?.getLong(KEY_MIN_FILE_SIZE, 500L * 1024 * 1024) ?: 500L * 1024 * 1024,
-            minAgeDays = prefs?.getInt(KEY_MIN_FILE_AGE, 30) ?: 30,
-            showInstallers = prefs?.getBoolean(KEY_SHOW_INSTALLERS, true) ?: true
+            minSize = prefs.getLong(KEY_MIN_FILE_SIZE, defaults.minSize),
+            minAgeDays = prefs.getInt(KEY_MIN_FILE_AGE, defaults.minAgeDays),
+            showInstallers = prefs.getBoolean(KEY_SHOW_INSTALLERS, defaults.showInstallers),
         )
     }
 
     fun setFileFilter(filter: FileFilter) {
-        prefs?.edit()?.apply {
+        prefs.edit {
             putLong(KEY_MIN_FILE_SIZE, filter.minSize)
             putInt(KEY_MIN_FILE_AGE, filter.minAgeDays)
             putBoolean(KEY_SHOW_INSTALLERS, filter.showInstallers)
-            apply()
         }
     }
 
-    private fun iterativeFolderSize(root: File): Long {
-        if (!root.exists()) return 0L
-        if (root.isFile) return root.length()
-
-        var totalSize = 0L
-        val stack = ArrayDeque<File>()
-        stack.push(root)
-
-        while (stack.isNotEmpty()) {
-            val current = stack.pop()
-            val files = current.listFiles()
-            if (files != null) {
-                for (file in files) {
-                    if (file.isFile) {
-                        totalSize += file.length()
-                    } else if (file.isDirectory) {
-                        stack.push(file)
-                    }
-                }
-            }
-        }
-        return totalSize
-    }
+    private fun folderSize(root: File): Long =
+        root.walk().filter { it.isFile }.sumOf { it.length() }
 
     companion object {
-        const val WEEKLY_CLEANUP_WORK = "weekly-cache-cleanup"
+        /** Unique WorkManager name; the value predates daily/monthly schedules and must stay stable. */
+        const val CLEANUP_WORK = "weekly-cache-cleanup"
         const val INCLUDE_SWEEP = "include_sweep"
         private const val MAX_SCAN_NODES = 5000
+        private const val LAST_USED_WINDOW_DAYS = 180L
+        private const val KEY_CUSTOM_FOLDERS = "custom_folders"
         private const val KEY_FREQUENCY = "cleanup_frequency"
         private const val KEY_INCLUDE_SWEEP = "cleanup_include_sweep"
         private const val KEY_LAST_RUN = "cleanup_last_run"
@@ -600,10 +658,18 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_MIN_FILE_AGE = "min_file_age"
         private const val KEY_SHOW_INSTALLERS = "show_installers"
 
+        private val SAF_PROJECTION = arrayOf(
+            Document.COLUMN_DOCUMENT_ID,
+            Document.COLUMN_DISPLAY_NAME,
+            Document.COLUMN_MIME_TYPE,
+            Document.COLUMN_SIZE,
+            Document.COLUMN_LAST_MODIFIED,
+        )
+
         /** Ignore files below this size when hunting duplicates - tiny files aren't worth the churn. */
         private const val MIN_DUPLICATE_BYTES = 1L * 1024 * 1024
 
-        /** Bytes hashed per file to fingerprint content for duplicate detection. */
-        private const val FINGERPRINT_BYTES = 1 * 1024 * 1024
+        /** Bytes hashed from each end of a file to fingerprint its content for duplicate detection. */
+        private const val FINGERPRINT_BYTES = 1L * 1024 * 1024
     }
 }
