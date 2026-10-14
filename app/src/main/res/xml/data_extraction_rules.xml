@@ -15,7 +15,6 @@
         <exclude-domain name="sharedpref"/>
         <exclude-domain name="database"/>
         <exclude-domain name="external"/>
-        <exclude-domain name="external"/>
         <exclude-domain name="root"/>
     </device-transfer>
 </data-extraction-rules>
