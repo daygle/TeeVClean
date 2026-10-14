@@ -1,5 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- Configure Android 12+ data extraction (cloud backups/device transfers). -->
+    <queries>
+        <provider
+            android:authorities="com.android.textburrito.gdrive" />
+        <provider
+            android:authorities="com.android.externalstorage.photos" />
+        <provider
+            android:authorities="com.android.backup.BackupTransportService" />
+    </queries>
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.faketouch" android:required="false" />
@@ -22,6 +31,7 @@
     <!-- Backups are off: saved folder Uris are only usable with grants that don't survive a restore. -->
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/Theme.TeeVClean"
         android:label="@string/app_name"
         android:banner="@drawable/teevclean_banner"

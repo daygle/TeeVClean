@@ -191,5 +191,8 @@
     <string name="filter_show_installers">Include installer APKs</string>
     <string name="filter_size_unit_mb">%1$d MB</string>
     <string name="filter_size_unit_gb">%1$d GB</string>
-    <string name="filter_age_unit_days">%1$d Days</string>
+    <plurals name="filter_age_unit_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
 </resources>
