@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        Backups are disabled: allowBackup="false" in the manifest.
+        Set this file's content to false so no data is backed up to cloud.
+    -->
+    <include
+        android:include="false"
+        android:cloudBackup="false"
+        android:deviceBackup="false"/>
+</full-backup-content>

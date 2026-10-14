@@ -4,7 +4,7 @@
   Backups are off (android:allowBackup="false"), so only transfer/backup
   exclusions are needed here; nothing is allowed to leave the device.
 -->
-<data-extraction-rules>
+<data-extraction-rules xmlns:android="http://schemas.android.com/apk/res/android">
     <cloud-backup>
         <exclude domain="sharedpref" path="."/>
         <exclude domain="database" path="."/>
