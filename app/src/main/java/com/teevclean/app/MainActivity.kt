@@ -954,10 +954,10 @@ private fun FilterDialog(
         2L * 1024 * 1024 * 1024 to stringResource(R.string.filter_size_unit_gb, 2)
     )
     val ageOptions = listOf(
-        7 to stringResource(R.string.filter_age_unit_days, 7),
-        14 to stringResource(R.string.filter_age_unit_days, 14),
-        30 to stringResource(R.string.filter_age_unit_days, 30),
-        90 to stringResource(R.string.filter_age_unit_days, 90)
+        7 to pluralStringResource(R.plurals.filter_age_unit_days, 7, 7),
+        14 to pluralStringResource(R.plurals.filter_age_unit_days, 14, 14),
+        30 to pluralStringResource(R.plurals.filter_age_unit_days, 30, 30),
+        90 to pluralStringResource(R.plurals.filter_age_unit_days, 90, 90)
     )
 
     AlertDialog(
