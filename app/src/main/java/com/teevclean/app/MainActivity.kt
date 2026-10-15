@@ -534,13 +534,6 @@ private fun CleanupScreen(
             }
             item {
                 ActionRow(
-                    stringResource(R.string.large_files),
-                    stringResource(R.string.feature_large_files_desc),
-                    stringResource(R.string.action_review),
-                ) { onNavigate(Screen.LARGE) }
-            }
-            item {
-                ActionRow(
                     stringResource(R.string.temp_and_logs),
                     stringResource(R.string.temp_and_logs_desc),
                     stringResource(R.string.action_sweep),

@@ -101,7 +101,6 @@
     <string name="settings_about">About TeeVClean</string>
 
     <string name="action_open">Open</string>
-    <string name="action_review">Review</string>
     <string name="action_sweep">Sweep</string>
     <string name="temp_and_logs">Temporary/Log Files</string>
     <string name="temp_and_logs_desc">Remove temp, log and thumbnail files, other computers\' drive metadata and stale torrent pieces in the folders you added.</string>
