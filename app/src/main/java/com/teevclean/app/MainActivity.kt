@@ -504,7 +504,7 @@ private fun CleanupScreen(
             item {
                 ActionRow(
                     stringResource(R.string.free_up_space),
-                    stringResource(R.string.other_app_caches_desc),
+                    stringResource(R.string.free_up_space_desc),
                     stringResource(R.string.action_open),
                     onClick = onFreeUpSpace,
                 )

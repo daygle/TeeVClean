@@ -104,6 +104,7 @@
     <string name="temp_and_logs">Temporary/Log Files</string>
     <string name="temp_and_logs_desc">Remove temp, log and thumbnail files, other computers\' drive metadata and stale torrent pieces in the folders you added.</string>
     <string name="free_up_space">Open Android “Free up space”</string>
+    <string name="free_up_space_desc">Android\'s own storage tool - review and remove apps, downloads and other large items across the whole device.</string>
     <string name="delete">Delete</string>
     <string name="confirm_sweep_desc">Remove temp, log and thumbnail files, macOS/Windows/Linux drive metadata and trash folders (._ files, desktop.ini, .Trashes, .Trash-*), torrent pieces untouched for 7 days, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Clean-up</string>
