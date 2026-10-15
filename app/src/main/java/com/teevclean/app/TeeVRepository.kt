@@ -882,6 +882,29 @@ class TeeVRepository(private val context: Context) {
         deleteFiles(redundant)
     }
 
+    /**
+     * The unattended clean-up shared by the schedule and Overview's Review Clean-up: TeeVClean's
+     * own cache always, plus the chosen [options]. Each part is added to [kinds] and [results]
+     * as soon as it finishes, so a caller can still record what was done if a later part fails.
+     */
+    suspend fun runCleanup(options: ScheduleOptions, kinds: MutableList<CleanupKind>, results: MutableList<CleanupResult>) {
+        results += clearOwnCache()
+        kinds += CleanupKind.OWN_CACHE
+        if (options.sweepFolders) {
+            results += sweepJunk()
+            kinds += CleanupKind.SWEEP_FOLDERS
+        }
+        if (options.sweepDevice || options.trash) {
+            results += cleanDeviceStorage(sweep = options.sweepDevice, trash = options.trash)
+            if (options.sweepDevice) kinds += CleanupKind.SWEEP_DEVICE
+            if (options.trash) kinds += CleanupKind.TRASH
+        }
+        if (options.installedApks) {
+            results += removeInstalledApks()
+            kinds += CleanupKind.INSTALLERS
+        }
+    }
+
     /** Free bytes on the data partition right now; used to measure what a system cleanup freed. */
     fun freeBytes(): Long = dataPartitionSpace().second
 

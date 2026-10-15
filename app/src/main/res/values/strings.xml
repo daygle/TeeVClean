@@ -25,10 +25,13 @@
     <string name="used_of_total">%1$s of %2$s used</string>
     <string name="available_space_label">available space</string>
     <string name="review_cleanup">Review Clean-up</string>
+    <string name="review_always_included">Always included: TeeVClean cache (%1$s)</string>
+    <string name="review_footer">Other apps\' caches and your own files are never touched here - use Application Caches, Files or Duplicates for those.</string>
+    <string name="clean_now">Clean Now</string>
+    <string name="cleaning_in_progress">Cleaning up…</string>
 
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">TeeVClean Cache</string>
-    <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
     <string name="all_app_caches">Application Caches</string>
     <string name="all_app_caches_desc">Android asks you to confirm, then clears every app\'s cache at once. App data stays intact.</string>
     <string name="action_clear">Clear</string>
@@ -69,13 +72,10 @@
     <string name="enable">Enable</string>
     <string name="cancel">Cancel</string>
 
-    <string name="confirm_cleanup">Confirm Clean-up</string>
-    <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
     <string name="schedule_clean_sweep">Junk Files (Custom Folders)</string>
     <string name="schedule_clean_device_sweep">Junk Files (All Storage)</string>
     <string name="schedule_clean_installed_apks">Installers (Already Installed)</string>
     <string name="schedule_clean_trash">Trash</string>
-    <string name="remove_cache">Remove Cache</string>
 
     <string name="last_used_unavailable">Last used unavailable</string>
     <string name="last_used_at">Last used %1$s</string>

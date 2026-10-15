@@ -16,30 +16,15 @@ class CleanupWorker(
         val kinds = mutableListOf<CleanupKind>()
         val results = mutableListOf<CleanupResult>()
         var finished = false
-
-        /** Runs one part of the clean-up and remembers it once it has completed. */
-        suspend fun part(vararg partKinds: CleanupKind, clean: suspend () -> CleanupResult) {
-            results += clean()
-            kinds.addAll(partKinds)
-        }
+        val options = ScheduleOptions(
+            sweepFolders = inputData.getBoolean(TeeVRepository.INCLUDE_SWEEP, false),
+            sweepDevice = inputData.getBoolean(TeeVRepository.INCLUDE_DEVICE_SWEEP, false),
+            installedApks = inputData.getBoolean(TeeVRepository.INCLUDE_INSTALLED_APKS, false),
+            trash = inputData.getBoolean(TeeVRepository.INCLUDE_TRASH, false),
+        )
 
         return try {
-            part(CleanupKind.OWN_CACHE) { repository.clearOwnCache() }
-            if (inputData.getBoolean(TeeVRepository.INCLUDE_SWEEP, false)) {
-                part(CleanupKind.SWEEP_FOLDERS) { repository.sweepJunk() }
-            }
-            val sweepDevice = inputData.getBoolean(TeeVRepository.INCLUDE_DEVICE_SWEEP, false)
-            val trash = inputData.getBoolean(TeeVRepository.INCLUDE_TRASH, false)
-            if (sweepDevice || trash) {
-                val deviceKinds = listOfNotNull(
-                    CleanupKind.SWEEP_DEVICE.takeIf { sweepDevice },
-                    CleanupKind.TRASH.takeIf { trash },
-                )
-                part(*deviceKinds.toTypedArray()) { repository.cleanDeviceStorage(sweep = sweepDevice, trash = trash) }
-            }
-            if (inputData.getBoolean(TeeVRepository.INCLUDE_INSTALLED_APKS, false)) {
-                part(CleanupKind.INSTALLERS) { repository.removeInstalledApks() }
-            }
+            repository.runCleanup(options, kinds, results)
             finished = true
             Result.success()
         } catch (e: CancellationException) {

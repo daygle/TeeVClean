@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -225,10 +226,25 @@ class TeeVViewModel(
         refreshData()
     }
 
-    fun clearCache(onComplete: (CleanupResult) -> Unit) {
+    /**
+     * Overview's Review Clean-up: the same clean-up as the schedule (TeeVClean's cache plus
+     * [options]), logged as manual. If a part fails, the parts that finished are still recorded.
+     */
+    fun cleanNow(options: ScheduleOptions, onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
-            val result = repository.clearOwnCache()
-            record(CleanupKind.OWN_CACHE, result)
+            val kinds = mutableListOf<CleanupKind>()
+            val results = mutableListOf<CleanupResult>()
+            val finished = try {
+                repository.runCleanup(options, kinds, results)
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            val result = CleanupResult(results.sumOf { it.freedBytes }, results.sumOf { it.itemsRemoved })
+            repository.recordCleanup(kinds, result, automatic = false, complete = finished)
+            invalidateDuplicates()
             refreshData()
             onComplete(result)
         }
