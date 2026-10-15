@@ -32,7 +32,7 @@ class TeeVViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { repository.getCustomFolders() } returns listOf("content://tree/a")
         every { repository.getCleanupFrequency() } returns CleanupFrequency.WEEKLY
-        every { repository.isScheduledSweepEnabled() } returns true
+        every { repository.getScheduleOptions() } returns ScheduleOptions(sweepFolders = true, installedApks = true)
         every { repository.getCleanupHistory() } returns CleanupHistory(1L, 10L, 1)
         every { repository.getFileFilter() } returns FileFilter()
         coEvery { repository.readStorage() } returns StorageSummary(used = 40, total = 100)
@@ -53,7 +53,7 @@ class TeeVViewModelTest {
         val vm = viewModel()
         assertEquals(Screen.OVERVIEW, vm.currentScreen)
         assertEquals(CleanupFrequency.WEEKLY, vm.cleanupFrequency)
-        assertTrue(vm.scheduleSweepEnabled)
+        assertEquals(ScheduleOptions(sweepFolders = true, installedApks = true), vm.scheduleOptions)
         assertEquals(listOf("content://tree/a"), vm.customFolders)
     }
 

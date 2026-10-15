@@ -136,7 +136,7 @@ class TeeVViewModel(
         private set
     var cleanupFrequency by mutableStateOf(repository.getCleanupFrequency())
         private set
-    var scheduleSweepEnabled by mutableStateOf(repository.isScheduledSweepEnabled())
+    var scheduleOptions by mutableStateOf(repository.getScheduleOptions())
         private set
     var cacheSize by mutableLongStateOf(0L)
         private set
@@ -177,7 +177,7 @@ class TeeVViewModel(
                 cacheSize = cacheDeferred.await()
                 cleanupHistory = repository.getCleanupHistory()
                 cleanupFrequency = repository.getCleanupFrequency()
-                scheduleSweepEnabled = repository.isScheduledSweepEnabled()
+                scheduleOptions = repository.getScheduleOptions()
                 customFolders = repository.getCustomFolders()
             } finally {
                 // A superseded refresh must not clear the flag while its replacement is running.
@@ -283,10 +283,10 @@ class TeeVViewModel(
         }
     }
 
-    fun setSchedule(frequency: CleanupFrequency, includeSweep: Boolean) {
-        repository.setCleanupSchedule(frequency, includeSweep)
+    fun setSchedule(frequency: CleanupFrequency, options: ScheduleOptions) {
+        repository.setCleanupSchedule(frequency, options)
         cleanupFrequency = repository.getCleanupFrequency()
-        scheduleSweepEnabled = repository.isScheduledSweepEnabled()
+        scheduleOptions = repository.getScheduleOptions()
     }
 
     fun openAppInfo(packageName: String) = repository.openAppInfo(packageName)
