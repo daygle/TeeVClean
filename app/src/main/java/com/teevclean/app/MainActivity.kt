@@ -416,6 +416,7 @@ fun TeeVCleanApp(
                         )
                         Screen.SETTINGS -> SettingsScreen(
                             scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleOptions),
+                            scheduleTimes = scheduleTimesText(viewModel.cleanupFrequency, viewModel.lastAutomaticRun, viewModel.nextScheduledRun),
                             customFolders = viewModel.customFolders,
                             hasUsageAccess = hasUsageStatsPermission(context),
                             hasStorageAccess = hasStorageAccessPermission(context, viewModel),
@@ -971,6 +972,17 @@ private fun CleanupKind.labelRes(): Int = when (this) {
     CleanupKind.TRASH -> R.string.schedule_clean_trash
     CleanupKind.FILES -> R.string.large_files
     CleanupKind.DUPLICATES -> R.string.duplicates
+}
+
+/** "Last run: … · Next run: about …" for the Settings card; null while no schedule is set. */
+@Composable
+private fun scheduleTimesText(frequency: CleanupFrequency, lastRun: Long, nextRun: Long?): String? {
+    if (frequency == CleanupFrequency.OFF) return null
+    val format = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+    val last = if (lastRun > 0) format.format(lastRun) else stringResource(R.string.history_never)
+    val next = nextRun?.let { stringResource(R.string.schedule_next_run, format.format(it)) }
+        ?: stringResource(R.string.schedule_next_run_unknown)
+    return stringResource(R.string.schedule_last_run, last) + "  ·  " + next
 }
 
 @Composable

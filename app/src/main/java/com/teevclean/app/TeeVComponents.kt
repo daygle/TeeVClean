@@ -375,6 +375,8 @@ fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () ->
 @Composable
 fun SettingsScreen(
     scheduleSummary: String,
+    /** Last and next automatic run, shown under the summary while a schedule is set. */
+    scheduleTimes: String?,
     customFolders: List<String>,
     hasUsageAccess: Boolean,
     hasStorageAccess: Boolean,
@@ -392,7 +394,13 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_cleanup_schedule), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(scheduleSummary, color = Muted, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(scheduleSummary, color = Muted)
+                            if (scheduleTimes != null) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(scheduleTimes, color = Muted, fontSize = 14.sp)
+                            }
+                        }
                         TvButton(onClick = onEditSchedule) {
                             Text(stringResource(R.string.schedule_change))
                         }

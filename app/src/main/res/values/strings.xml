@@ -122,6 +122,9 @@
         <item quantity="other">%1$s · plus %2$d extra clean-ups</item>
     </plurals>
     <string name="schedule_change">Change</string>
+    <string name="schedule_last_run">Last run: %1$s</string>
+    <string name="schedule_next_run">Next run: about %1$s</string>
+    <string name="schedule_next_run_unknown">Next run: waiting for Android</string>
     <string name="save">Save</string>
 
     <string name="cleanup_complete">Clean-up Complete</string>

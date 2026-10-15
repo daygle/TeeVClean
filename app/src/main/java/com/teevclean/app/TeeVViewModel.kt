@@ -160,6 +160,11 @@ class TeeVViewModel(
         private set
     var cleanupLog by mutableStateOf(repository.getCleanupLog())
         private set
+    var lastAutomaticRun by mutableLongStateOf(repository.getLastAutomaticRun())
+        private set
+    /** Android's estimate for the next scheduled run; null when unknown or nothing is scheduled. */
+    var nextScheduledRun by mutableStateOf<Long?>(null)
+        private set
     var storageBreakdown by mutableStateOf<StorageBreakdown?>(null)
         private set
     var isLoadingBreakdown by mutableStateOf(false)
@@ -189,6 +194,8 @@ class TeeVViewModel(
                 cacheSize = cacheDeferred.await()
                 cleanupHistory = repository.getCleanupHistory()
                 cleanupLog = repository.getCleanupLog()
+                lastAutomaticRun = repository.getLastAutomaticRun()
+                nextScheduledRun = repository.getNextScheduledRun()
                 cleanupFrequency = repository.getCleanupFrequency()
                 scheduleOptions = repository.getScheduleOptions()
                 customFolders = repository.getCustomFolders()
@@ -335,6 +342,12 @@ class TeeVViewModel(
         repository.setCleanupSchedule(frequency, options)
         cleanupFrequency = repository.getCleanupFrequency()
         scheduleOptions = repository.getScheduleOptions()
+        // WorkManager plans the new run in the background, so wait briefly for its time.
+        if (frequency == CleanupFrequency.OFF) {
+            nextScheduledRun = null
+        } else {
+            viewModelScope.launch { nextScheduledRun = repository.getNextScheduledRun(waitMillis = 3_000L) }
+        }
     }
 
     fun openAppInfo(packageName: String) = repository.openAppInfo(packageName)

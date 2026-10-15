@@ -22,12 +22,17 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
@@ -371,6 +376,41 @@ class TeeVRepository(private val context: Context) {
         prefs.getInt(KEY_TOTAL_ITEMS, 0),
     )
 
+    /**
+     * When the schedule last ran, or 0 if never. Runs from before this was stored fall back to
+     * the newest automatic entry in the log.
+     */
+    fun getLastAutomaticRun(): Long =
+        prefs.getLong(KEY_LAST_AUTO_RUN, 0L).takeIf { it > 0 }
+            ?: getCleanupLog().firstOrNull { it.automatic }?.time
+            ?: 0L
+
+    /**
+     * When Android plans to start the next scheduled clean-up, or null when nothing is scheduled
+     * or Android hasn't worked out a time (e.g. a run is in progress). It's an estimate: Android
+     * may move it to save power, and a TV in deep standby runs it once it wakes.
+     */
+    suspend fun getNextScheduledRun(waitMillis: Long = 0L): Long? = withContext(Dispatchers.IO) {
+        try {
+            val times = WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkFlow(CLEANUP_WORK)
+                .map { infos ->
+                    infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED }
+                        ?.nextScheduleTimeMillis
+                        ?.takeIf { it > 0 && it != Long.MAX_VALUE }
+                }
+            // Right after a schedule change WorkManager may not have stored the new run yet, so
+            // a caller can wait briefly for the first known time.
+            if (waitMillis > 0) {
+                withTimeoutOrNull(waitMillis) { times.filterNotNull().first() }
+            } else {
+                times.first()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** The clean-up log, newest first. */
     fun getCleanupLog(): List<CleanupLogEntry> = CleanupLogCodec.decode(prefs.getString(KEY_CLEANUP_LOG, null))
 
@@ -390,6 +430,7 @@ class TeeVRepository(private val context: Context) {
         val entry = CleanupLogEntry(now, automatic, kinds, result.freedBytes, result.itemsRemoved, complete)
         prefs.edit {
             putLong(KEY_LAST_RUN, now)
+            if (automatic) putLong(KEY_LAST_AUTO_RUN, now)
             putLong(KEY_TOTAL_FREED, prefs.getLong(KEY_TOTAL_FREED, 0L) + result.freedBytes)
             putInt(KEY_TOTAL_ITEMS, prefs.getInt(KEY_TOTAL_ITEMS, 0) + result.itemsRemoved)
             putString(KEY_CLEANUP_LOG, CleanupLogCodec.encode(CleanupLogCodec.prepend(getCleanupLog(), entry, MAX_LOG_ENTRIES)))
@@ -1060,6 +1101,7 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_TOTAL_FREED = "cleanup_total_freed"
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
         private const val KEY_CLEANUP_LOG = "cleanup_log"
+        private const val KEY_LAST_AUTO_RUN = "cleanup_last_auto_run"
 
         /** The log keeps only the most recent clean-ups. */
         private const val MAX_LOG_ENTRIES = 50
