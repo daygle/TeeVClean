@@ -287,6 +287,14 @@ fun TeeVCleanApp(
             hasFolders = viewModel.customFolders.isNotEmpty(),
             hasStorageAccess = viewModel.hasFullStorageAccess(),
             onDismiss = { showCleanup = false },
+            onRequireFolders = {
+                showCleanup = false
+                onAddFolder()
+            },
+            onRequireStorage = {
+                showCleanup = false
+                onRequestStorageAccess()
+            },
         ) { options ->
             // Closed straight away: a device-wide sweep can take a while, and a second press
             // must not start a second run.
@@ -1090,24 +1098,26 @@ private fun ScheduleDialog(
 }
 
 /**
- * Overview's Review Clean-up: runs clean-up now with all items selected by default.
+ * Overview's Review Clean-up: runs clean-up now with all items selected by default and fully interactive toggles.
  */
 @Composable
 private fun ReviewCleanupDialog(
     hasFolders: Boolean,
     hasStorageAccess: Boolean,
     onDismiss: () -> Unit,
+    onRequireFolders: () -> Unit,
+    onRequireStorage: () -> Unit,
     onClean: (ScheduleOptions) -> Unit,
 ) {
     val hasAppCaches = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
     var selected by remember {
         mutableStateOf(
             ScheduleOptions(
-                appCaches = hasAppCaches && hasStorageAccess,
-                sweepFolders = hasFolders,
-                sweepDevice = hasStorageAccess,
-                installedApks = hasStorageAccess || hasFolders,
-                trash = hasStorageAccess && TRASH_SUPPORTED,
+                appCaches = hasAppCaches,
+                sweepFolders = true,
+                sweepDevice = true,
+                installedApks = true,
+                trash = TRASH_SUPPORTED,
             )
         )
     }
@@ -1122,15 +1132,26 @@ private fun ReviewCleanupDialog(
         title = { Text(stringResource(R.string.review_cleanup)) },
         text = {
             Column(Modifier.verticalScroll(scrollState)) {
-                CleanupOptionsList(selected, hasFolders, hasStorageAccess, showAppCaches = true) { selected = it }
+                CleanupOptionsList(selected, hasFolders, hasStorageAccess, showAppCaches = true, allAvailable = true) { selected = it }
                 Spacer(Modifier.height(20.dp))
                 Text(stringResource(R.string.review_footer), color = Muted, fontSize = 13.sp)
             }
         },
         confirmButton = {
-            TvButton(modifier = revealBottom, onClick = { onClean(selected.availableOnly(hasFolders, hasStorageAccess, hasAppCaches)) }) {
-                Text(stringResource(R.string.clean_now))
-            }
+            TvButton(
+                modifier = revealBottom,
+                onClick = {
+                    if (selected.sweepFolders && !hasFolders) {
+                        onDismiss()
+                        onRequireFolders()
+                    } else if ((selected.sweepDevice || selected.trash || selected.appCaches) && !hasStorageAccess) {
+                        onDismiss()
+                        onRequireStorage()
+                    } else {
+                        onClean(selected.availableOnly(hasFolders, hasStorageAccess, hasAppCaches))
+                    }
+                },
+            ) { Text(stringResource(R.string.clean_now)) }
         },
         // Cancel takes focus on open, so a stray OK press deletes nothing.
         dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
@@ -1144,30 +1165,34 @@ private fun CleanupOptionsList(
     hasFolders: Boolean,
     hasStorageAccess: Boolean,
     showAppCaches: Boolean = false,
+    allAvailable: Boolean = false,
     onChange: (ScheduleOptions) -> Unit,
 ) {
+    val av = allAvailable || hasStorageAccess
+    val avFolders = allAvailable || hasFolders
+    val avInstallers = allAvailable || hasStorageAccess || hasFolders
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            ScheduleToggle(stringResource(R.string.all_app_caches), selected.appCaches, hasStorageAccess) {
+            ScheduleToggle(stringResource(R.string.all_app_caches), selected.appCaches, available = av) {
                 onChange(selected.copy(appCaches = !selected.appCaches))
             }
         }
-        ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, hasFolders) {
+        ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, available = avFolders) {
             onChange(selected.copy(sweepFolders = !selected.sweepFolders))
         }
-        ScheduleToggle(stringResource(R.string.schedule_clean_device_sweep), selected.sweepDevice, hasStorageAccess) {
+        ScheduleToggle(stringResource(R.string.schedule_clean_device_sweep), selected.sweepDevice, available = av) {
             onChange(selected.copy(sweepDevice = !selected.sweepDevice))
         }
-        ScheduleToggle(stringResource(R.string.schedule_clean_installed_apks), selected.installedApks, hasStorageAccess || hasFolders) {
+        ScheduleToggle(stringResource(R.string.schedule_clean_installed_apks), selected.installedApks, available = avInstallers) {
             onChange(selected.copy(installedApks = !selected.installedApks))
         }
         if (TRASH_SUPPORTED) {
-            ScheduleToggle(stringResource(R.string.schedule_clean_trash), selected.trash, hasStorageAccess) {
+            ScheduleToggle(stringResource(R.string.schedule_clean_trash), selected.trash, available = av) {
                 onChange(selected.copy(trash = !selected.trash))
             }
         }
     }
-    if (!hasFolders || !hasStorageAccess || (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
+    if (!allAvailable && (!hasFolders || !hasStorageAccess || (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R))) {
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.schedule_unavailable_hint), color = Muted, fontSize = 13.sp)
     }
