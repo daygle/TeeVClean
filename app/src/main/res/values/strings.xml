@@ -119,10 +119,6 @@
     <string name="freq_daily">Daily</string>
     <string name="freq_weekly">Weekly</string>
     <string name="freq_monthly">Monthly</string>
-    <plurals name="schedule_with_extras">
-        <item quantity="one">%1$s · Plus %2$d Extra Clean-up</item>
-        <item quantity="other">%1$s · Plus %2$d Extra Clean-ups</item>
-    </plurals>
     <string name="schedule_change">Change</string>
     <string name="schedule_last_run">Last Run: %1$s</string>
     <string name="schedule_next_run">Next Run: About %1$s</string>
@@ -202,6 +198,7 @@
         <item quantity="other">Freed %1$s across %2$d items in total.</item>
     </plurals>
     <string name="remove_folder">Remove Folder</string>
+    <string name="folder_not_found">Not Found</string>
     <string name="add_folder">Add Folder</string>
     <string name="folder_grant_failed">Android didn\'t allow lasting access to that folder. Please choose another one.</string>
     <string name="about_version">TeeVClean Version %1$s</string>

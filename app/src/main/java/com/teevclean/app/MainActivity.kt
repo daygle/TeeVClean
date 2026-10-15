@@ -464,9 +464,10 @@ fun TeeVCleanApp(
                             onLoad = { viewModel.loadBreakdown() },
                         )
                         Screen.SETTINGS -> SettingsScreen(
-                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleOptions, viewModel.scheduleMinuteOfDay),
+                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleMinuteOfDay),
                             scheduleTimes = scheduleTimesText(viewModel.cleanupFrequency, viewModel.lastAutomaticRun, viewModel.nextScheduledRun),
                             customFolders = viewModel.customFolders,
+                            missingFolders = viewModel.missingFolders,
                             hasUsageAccess = hasUsageStatsPermission(context),
                             hasStorageAccess = hasStorageAccessPermission(context, viewModel),
                             appVersion = BuildConfig.VERSION_NAME,
@@ -1052,19 +1053,13 @@ private fun formatMinuteOfDay(minuteOfDay: Int): String {
 }
 
 @Composable
-private fun scheduleStatusText(frequency: CleanupFrequency, options: ScheduleOptions, minuteOfDay: Int): String {
+private fun scheduleStatusText(frequency: CleanupFrequency, minuteOfDay: Int): String {
     val time = formatMinuteOfDay(minuteOfDay)
-    val base = when (frequency) {
+    return when (frequency) {
         CleanupFrequency.OFF -> stringResource(R.string.freq_off)
         CleanupFrequency.DAILY -> stringResource(R.string.schedule_at, stringResource(R.string.freq_daily), time)
         CleanupFrequency.WEEKLY -> stringResource(R.string.schedule_at, stringResource(R.string.freq_weekly), time)
         CleanupFrequency.MONTHLY -> stringResource(R.string.schedule_at, stringResource(R.string.freq_monthly), time)
-    }
-    val extras = options.extrasCount
-    return if (frequency != CleanupFrequency.OFF && extras > 0) {
-        pluralStringResource(R.plurals.schedule_with_extras, extras, base, extras)
-    } else {
-        base
     }
 }
 
