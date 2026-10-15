@@ -29,7 +29,7 @@
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">TeeVClean Cache</string>
     <string name="this_app_cache_desc">Safe to remove; app data and user files stay intact</string>
-    <string name="all_app_caches">All App Caches</string>
+    <string name="all_app_caches">Application Caches</string>
     <string name="all_app_caches_desc">Android asks you to confirm, then clears every app\'s cache at once. App data stays intact.</string>
     <string name="action_clear">Clear</string>
     <string name="clear_caches_needs_access">Allow all-files access for TeeVClean first - Android requires it to clear every app\'s cache.</string>
