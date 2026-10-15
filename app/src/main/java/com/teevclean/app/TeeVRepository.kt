@@ -39,6 +39,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.util.ArrayDeque
+import java.util.Calendar
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 data class StorageSummary(val used: Long, val total: Long) {
@@ -82,6 +84,50 @@ enum class CleanupFrequency(val intervalDays: Long?) {
     DAILY(1),
     WEEKLY(7),
     MONTHLY(30),
+}
+
+/**
+ * When scheduled clean-ups start: at a chosen time of day ([minuteOfDay], minutes after
+ * midnight in [timeZone]). Calendar arithmetic keeps the time fixed across daylight-saving
+ * changes. Free of Android types so it can be unit-tested.
+ */
+object ScheduleTiming {
+    const val DEFAULT_MINUTE_OF_DAY = 3 * 60
+
+    /** The time picker's step. */
+    const val STEP_MINUTES = 30
+
+    /** The first run: the next time the clock reaches [minuteOfDay], today or tomorrow. */
+    fun firstRun(now: Long, minuteOfDay: Int, timeZone: TimeZone): Long {
+        val calendar = atMinuteOfDay(now, minuteOfDay, timeZone)
+        if (calendar.timeInMillis <= now) calendar.add(Calendar.DAY_OF_MONTH, 1)
+        return calendar.timeInMillis
+    }
+
+    /**
+     * The run after the one planned for [previousTarget]: [intervalDays] later at [minuteOfDay].
+     * Runs that would already be past (the TV slept through them) are skipped, so the schedule
+     * stays on its days instead of drifting by however late the last run was.
+     */
+    fun nextRun(previousTarget: Long, intervalDays: Int, minuteOfDay: Int, now: Long, timeZone: TimeZone): Long {
+        val calendar = atMinuteOfDay(previousTarget, minuteOfDay, timeZone)
+        do {
+            calendar.add(Calendar.DAY_OF_MONTH, intervalDays)
+        } while (calendar.timeInMillis <= now)
+        return calendar.timeInMillis
+    }
+
+    /** [minuteOfDay] moved by [steps] picker steps, wrapping around midnight. */
+    fun step(minuteOfDay: Int, steps: Int): Int = Math.floorMod(minuteOfDay + steps * STEP_MINUTES, 24 * 60)
+
+    private fun atMinuteOfDay(day: Long, minuteOfDay: Int, timeZone: TimeZone): Calendar =
+        Calendar.getInstance(timeZone).apply {
+            timeInMillis = day
+            set(Calendar.HOUR_OF_DAY, minuteOfDay / 60)
+            set(Calendar.MINUTE, minuteOfDay % 60)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
 }
 
 /** What the background cleanup does besides clearing TeeVClean's own cache, which it always does. */
@@ -1004,37 +1050,79 @@ class TeeVRepository(private val context: Context) {
         trash = prefs.getBoolean(KEY_INCLUDE_TRASH, false),
     )
 
+    /** Time of day scheduled clean-ups start, in minutes after midnight. */
+    fun getScheduleMinuteOfDay(): Int = prefs.getInt(KEY_SCHEDULE_MINUTE_OF_DAY, ScheduleTiming.DEFAULT_MINUTE_OF_DAY)
+
     /**
      * Configures the recurring background cleanup. Only unattended-safe actions are ever
      * scheduled: the app's own cache always, plus the opted-in [options] - junk and trash that
      * nothing needs, and installers for apps that are already installed. Other apps' caches and
      * the user's own files are never automated because they need explicit interaction.
+     *
+     * The first run is set for the next time the clock reaches [minuteOfDay]; each finished run
+     * sets the next one ([scheduleNextRun]), so the time doesn't drift.
      */
-    fun setCleanupSchedule(frequency: CleanupFrequency, options: ScheduleOptions) {
+    fun setCleanupSchedule(frequency: CleanupFrequency, options: ScheduleOptions, minuteOfDay: Int) {
         prefs.edit {
             putString(KEY_FREQUENCY, frequency.name)
             putBoolean(KEY_INCLUDE_SWEEP, options.sweepFolders)
             putBoolean(KEY_INCLUDE_DEVICE_SWEEP, options.sweepDevice)
             putBoolean(KEY_INCLUDE_INSTALLED_APKS, options.installedApks)
             putBoolean(KEY_INCLUDE_TRASH, options.trash)
+            putInt(KEY_SCHEDULE_MINUTE_OF_DAY, minuteOfDay)
         }
-        val manager = WorkManager.getInstance(context)
-        val intervalDays = frequency.intervalDays
-        if (intervalDays == null) {
-            manager.cancelUniqueWork(CLEANUP_WORK)
+        if (frequency.intervalDays == null) {
+            prefs.edit { remove(KEY_NEXT_TARGET) }
+            WorkManager.getInstance(context).cancelUniqueWork(CLEANUP_WORK)
         } else {
-            val request = PeriodicWorkRequestBuilder<CleanupWorker>(intervalDays, TimeUnit.DAYS)
-                .setInputData(
-                    workDataOf(
-                        INCLUDE_SWEEP to options.sweepFolders,
-                        INCLUDE_DEVICE_SWEEP to options.sweepDevice,
-                        INCLUDE_INSTALLED_APKS to options.installedApks,
-                        INCLUDE_TRASH to options.trash,
-                    ),
-                )
-                .build()
-            manager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
+            enqueueSchedule(ScheduleTiming.firstRun(System.currentTimeMillis(), minuteOfDay, TimeZone.getDefault()))
         }
+    }
+
+    /**
+     * Called by a scheduled run once it has finished: sets the next run to the chosen time,
+     * one interval after the run that was planned. Does nothing if the schedule was switched
+     * off meanwhile.
+     */
+    fun scheduleNextRun() {
+        val intervalDays = getCleanupFrequency().intervalDays ?: return
+        val now = System.currentTimeMillis()
+        val planned = prefs.getLong(KEY_NEXT_TARGET, 0L).takeIf { it > 0 } ?: now
+        enqueueSchedule(
+            ScheduleTiming.nextRun(planned, intervalDays.toInt(), getScheduleMinuteOfDay(), now, TimeZone.getDefault()),
+        )
+    }
+
+    /**
+     * Schedules set before the time option existed have no planned run; line them up with the
+     * (default) time once. Cheap to call on every start.
+     */
+    fun alignLegacySchedule() {
+        if (getCleanupFrequency() != CleanupFrequency.OFF && prefs.getLong(KEY_NEXT_TARGET, 0L) == 0L) {
+            setCleanupSchedule(getCleanupFrequency(), getScheduleOptions(), getScheduleMinuteOfDay())
+        }
+    }
+
+    /**
+     * (Re)schedules the periodic clean-up with its next run at [target]. UPDATE keeps a run that
+     * is in progress going; the override then applies to the following run.
+     */
+    private fun enqueueSchedule(target: Long) {
+        val intervalDays = getCleanupFrequency().intervalDays ?: return
+        val options = getScheduleOptions()
+        prefs.edit { putLong(KEY_NEXT_TARGET, target) }
+        val request = PeriodicWorkRequestBuilder<CleanupWorker>(intervalDays, TimeUnit.DAYS)
+            .setNextScheduleTimeOverride(target)
+            .setInputData(
+                workDataOf(
+                    INCLUDE_SWEEP to options.sweepFolders,
+                    INCLUDE_DEVICE_SWEEP to options.sweepDevice,
+                    INCLUDE_INSTALLED_APKS to options.installedApks,
+                    INCLUDE_TRASH to options.trash,
+                ),
+            )
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     fun openAppInfo(packageName: String) {
@@ -1102,6 +1190,10 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
         private const val KEY_CLEANUP_LOG = "cleanup_log"
         private const val KEY_LAST_AUTO_RUN = "cleanup_last_auto_run"
+        private const val KEY_SCHEDULE_MINUTE_OF_DAY = "cleanup_minute_of_day"
+
+        /** When the next scheduled run is planned for; each run plans the following one from it. */
+        private const val KEY_NEXT_TARGET = "cleanup_next_target"
 
         /** The log keeps only the most recent clean-ups. */
         private const val MAX_LOG_ENTRIES = 50

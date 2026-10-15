@@ -87,6 +87,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import java.text.DateFormat
+import androidx.compose.runtime.mutableIntStateOf
+import java.util.Calendar
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.widthIn
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -317,11 +321,12 @@ fun TeeVCleanApp(
         ScheduleDialog(
             current = viewModel.cleanupFrequency,
             options = viewModel.scheduleOptions,
+            minuteOfDay = viewModel.scheduleMinuteOfDay,
             hasFolders = viewModel.customFolders.isNotEmpty(),
             hasStorageAccess = viewModel.hasFullStorageAccess(),
             onDismiss = { showSchedule = false },
-            onSave = { frequency, options ->
-                viewModel.setSchedule(frequency, options)
+            onSave = { frequency, options, minuteOfDay ->
+                viewModel.setSchedule(frequency, options, minuteOfDay)
                 showSchedule = false
             },
         )
@@ -415,7 +420,7 @@ fun TeeVCleanApp(
                             onLoad = { viewModel.loadBreakdown() },
                         )
                         Screen.SETTINGS -> SettingsScreen(
-                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleOptions),
+                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleOptions, viewModel.scheduleMinuteOfDay),
                             scheduleTimes = scheduleTimesText(viewModel.cleanupFrequency, viewModel.lastAutomaticRun, viewModel.nextScheduledRun),
                             customFolders = viewModel.customFolders,
                             hasUsageAccess = hasUsageStatsPermission(context),
@@ -985,13 +990,23 @@ private fun scheduleTimesText(frequency: CleanupFrequency, lastRun: Long, nextRu
     return stringResource(R.string.schedule_last_run, last) + "  ·  " + next
 }
 
+/** A time of day (minutes after midnight) in the TV's own short format, e.g. "3:00 AM" or "03:00". */
+private fun formatMinuteOfDay(minuteOfDay: Int): String {
+    val calendar = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, minuteOfDay / 60)
+        set(Calendar.MINUTE, minuteOfDay % 60)
+    }
+    return DateFormat.getTimeInstance(DateFormat.SHORT).format(calendar.time)
+}
+
 @Composable
-private fun scheduleStatusText(frequency: CleanupFrequency, options: ScheduleOptions): String {
+private fun scheduleStatusText(frequency: CleanupFrequency, options: ScheduleOptions, minuteOfDay: Int): String {
+    val time = formatMinuteOfDay(minuteOfDay)
     val base = when (frequency) {
         CleanupFrequency.OFF -> stringResource(R.string.freq_off)
-        CleanupFrequency.DAILY -> stringResource(R.string.freq_daily)
-        CleanupFrequency.WEEKLY -> stringResource(R.string.freq_weekly)
-        CleanupFrequency.MONTHLY -> stringResource(R.string.freq_monthly)
+        CleanupFrequency.DAILY -> stringResource(R.string.schedule_at, stringResource(R.string.freq_daily), time)
+        CleanupFrequency.WEEKLY -> stringResource(R.string.schedule_at, stringResource(R.string.freq_weekly), time)
+        CleanupFrequency.MONTHLY -> stringResource(R.string.schedule_at, stringResource(R.string.freq_monthly), time)
     }
     val extras = options.extrasCount
     return if (frequency != CleanupFrequency.OFF && extras > 0) {
@@ -1005,12 +1020,14 @@ private fun scheduleStatusText(frequency: CleanupFrequency, options: ScheduleOpt
 private fun ScheduleDialog(
     current: CleanupFrequency,
     options: ScheduleOptions,
+    minuteOfDay: Int,
     hasFolders: Boolean,
     hasStorageAccess: Boolean,
     onDismiss: () -> Unit,
-    onSave: (CleanupFrequency, ScheduleOptions) -> Unit,
+    onSave: (CleanupFrequency, ScheduleOptions, Int) -> Unit,
 ) {
     var frequency by remember { mutableStateOf(current) }
+    var time by remember { mutableIntStateOf(minuteOfDay) }
     var selected by remember { mutableStateOf(options) }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
@@ -1033,8 +1050,24 @@ private fun ScheduleDialog(
                     SelectableChip(stringResource(R.string.freq_weekly), frequency == CleanupFrequency.WEEKLY) { frequency = CleanupFrequency.WEEKLY }
                     SelectableChip(stringResource(R.string.freq_monthly), frequency == CleanupFrequency.MONTHLY) { frequency = CleanupFrequency.MONTHLY }
                 }
-                // The extras only matter when something is scheduled; hiding them keeps "Off" simple.
+                // Time and extras only matter when something is scheduled; hiding them keeps "Off" simple.
                 if (frequency != CleanupFrequency.OFF) {
+                    Spacer(Modifier.height(20.dp))
+                    Text(stringResource(R.string.schedule_time_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    // Steppers rather than a clock-face picker: easy to work with a D-pad.
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SelectableChip("◀", selected = false) { time = ScheduleTiming.step(time, -1) }
+                        Text(
+                            formatMinuteOfDay(time),
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(min = 110.dp),
+                        )
+                        SelectableChip("▶", selected = false) { time = ScheduleTiming.step(time, 1) }
+                    }
                     Spacer(Modifier.height(20.dp))
                     Text(stringResource(R.string.schedule_also_clean), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
@@ -1048,7 +1081,7 @@ private fun ScheduleDialog(
             TvButton(
                 modifier = revealBottom,
                 // Options that can't run (missing folder or access) are saved as off.
-                onClick = { onSave(frequency, selected.availableOnly(hasFolders, hasStorageAccess)) },
+                onClick = { onSave(frequency, selected.availableOnly(hasFolders, hasStorageAccess), time) },
             ) { Text(stringResource(R.string.save)) }
         },
         dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },

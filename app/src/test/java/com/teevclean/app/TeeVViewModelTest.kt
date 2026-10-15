@@ -36,6 +36,7 @@ class TeeVViewModelTest {
         every { repository.getCleanupHistory() } returns CleanupHistory(1L, 10L, 1)
         every { repository.getCleanupLog() } returns emptyList()
         every { repository.getLastAutomaticRun() } returns 0L
+        every { repository.getScheduleMinuteOfDay() } returns 180
         coEvery { repository.getNextScheduledRun(any()) } returns null
         every { repository.getFileFilter() } returns FileFilter()
         coEvery { repository.readStorage() } returns StorageSummary(used = 40, total = 100)
