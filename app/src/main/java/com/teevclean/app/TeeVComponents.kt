@@ -342,7 +342,12 @@ fun FeatureCard(
 }
 
 @Composable
-fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () -> Unit) {
+fun StorageCard(
+    storage: StorageSummary,
+    history: CleanupHistory,
+    cleanupButtonFocus: FocusRequester = remember { FocusRequester() },
+    onClean: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).padding(27.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(stringResource(R.string.storage_health_label), color = Lime, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp); Spacer(Modifier.height(10.dp)); Text(formatBytes(storage.used), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(stringResource(R.string.used_of_total, formatBytes(storage.used), formatBytes(storage.total)), color = Muted, fontSize = 15.sp) }
@@ -350,7 +355,7 @@ fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () ->
                 Text(formatBytes(storage.free), color = Lime, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.available_space_label), color = Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(14.dp))
-                TvButton(onClick = onClean) { Text(stringResource(R.string.review_cleanup)) }
+                TvButton(modifier = Modifier.focusRequester(cleanupButtonFocus), onClick = onClean) { Text(stringResource(R.string.review_cleanup)) }
             }
         }
         Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }

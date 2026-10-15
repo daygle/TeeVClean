@@ -180,9 +180,15 @@ class MainActivity : ComponentActivity() {
             openAllFilesAccessSettings()
             return
         }
+        val intent = Intent(StorageManager.ACTION_CLEAR_APP_CACHE)
+        if (intent.resolveActivity(packageManager) == null) {
+            Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
+            viewModel.openStorageManager()
+            return
+        }
         freeBeforeCacheClear = viewModel.freeBytes()
         try {
-            clearCachesLauncher.launch(Intent(StorageManager.ACTION_CLEAR_APP_CACHE))
+            clearCachesLauncher.launch(intent)
         } catch (_: Exception) {
             // ActivityNotFoundException on TVs without the screen; SecurityException if access was just revoked.
             Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
@@ -225,6 +231,7 @@ fun TeeVCleanApp(
     var lastBackPress by remember { mutableLongStateOf(0L) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val contentFocus = remember { FocusRequester() }
+    val cleanupButtonFocus = remember { FocusRequester() }
     // The sidebar item for the current screen; Back and D-pad Left from the content land here.
     val sidebarFocus = remember { FocusRequester() }
     // Whether D-pad focus was last in the content pane (rather than the sidebar).
@@ -369,7 +376,14 @@ fun TeeVCleanApp(
                         .focusProperties {
                             enter = { direction ->
                                 if (direction == FocusDirection.Right) {
-                                    restoreFocusToContentTop()
+                                    if (viewModel.currentScreen == Screen.OVERVIEW) {
+                                        scope.launch {
+                                            withFrameNanos { }
+                                            cleanupButtonFocus.tryRequestFocus()
+                                        }
+                                    } else {
+                                        restoreFocusToContentTop()
+                                    }
                                     FocusRequester.Cancel
                                 } else {
                                     FocusRequester.Default
@@ -379,7 +393,7 @@ fun TeeVCleanApp(
                         .focusGroup()
                 ) {
                     when (viewModel.currentScreen) {
-                        Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, viewModel.cleanupHistory, { showCleanup = true }) { viewModel.currentScreen = it }
+                        Screen.OVERVIEW -> Dashboard(viewModel.storageSummary, viewModel.apps, viewModel.largeFiles, viewModel.cleanupHistory, cleanupButtonFocus, { showCleanup = true }) { viewModel.currentScreen = it }
                         Screen.CLEAN -> CleanupScreen(
                             onSweep = { showSweep = true },
                             onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
@@ -453,10 +467,18 @@ fun TeeVCleanApp(
 }
 
 @Composable
-private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: List<FileSummary>, history: CleanupHistory, onClean: () -> Unit, onNavigate: (Screen) -> Unit) {
+private fun Dashboard(
+    storage: StorageSummary,
+    apps: List<AppSummary>,
+    files: List<FileSummary>,
+    history: CleanupHistory,
+    cleanupButtonFocus: FocusRequester,
+    onClean: () -> Unit,
+    onNavigate: (Screen) -> Unit,
+) {
     ScreenScaffold(stringResource(R.string.greeting), stringResource(R.string.sub_greeting)) {
         ScreenList(spacing = 18.dp) {
-            item { StorageCard(storage, history, onClean) }
+            item { StorageCard(storage, history, cleanupButtonFocus, onClean) }
             item { Text(stringResource(R.string.safe_tools_title), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) }
             item {
                 FeatureCard(
