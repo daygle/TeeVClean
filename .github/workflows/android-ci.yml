@@ -27,7 +27,7 @@ jobs:
       run: chmod +x gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --warning-mode all
 
     - name: Run Unit Tests
       run: ./gradlew testDebugUnitTest
