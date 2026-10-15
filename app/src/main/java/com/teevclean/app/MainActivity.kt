@@ -311,10 +311,6 @@ fun TeeVCleanApp(
             hasFolders = viewModel.customFolders.isNotEmpty(),
             hasStorageAccess = viewModel.hasFullStorageAccess(),
             onDismiss = { showCleanup = false },
-            onRequireFolders = {
-                showCleanup = false
-                onAddFolder()
-            },
             onRequireStorage = {
                 showCleanup = false
                 onRequestStorageAccess()
@@ -1152,7 +1148,6 @@ private fun ReviewCleanupDialog(
     hasFolders: Boolean,
     hasStorageAccess: Boolean,
     onDismiss: () -> Unit,
-    onRequireFolders: () -> Unit,
     onRequireStorage: () -> Unit,
     onClean: (ScheduleOptions) -> Unit,
 ) {
@@ -1190,10 +1185,7 @@ private fun ReviewCleanupDialog(
             TvButton(
                 modifier = revealBottom,
                 onClick = {
-                    if (selected.sweepFolders && !hasFolders) {
-                        onDismiss()
-                        onRequireFolders()
-                    } else if ((selected.sweepDevice || selected.trash || selected.appCaches) && !hasStorageAccess) {
+                    if ((selected.sweepDevice || selected.trash || selected.appCaches) && !hasStorageAccess) {
                         onDismiss()
                         onRequireStorage()
                     } else {
@@ -1218,7 +1210,6 @@ private fun CleanupOptionsList(
     onChange: (ScheduleOptions) -> Unit,
 ) {
     val av = allAvailable || hasStorageAccess
-    val avFolders = allAvailable || hasFolders
     val avInstallers = allAvailable || hasStorageAccess || hasFolders
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1226,8 +1217,11 @@ private fun CleanupOptionsList(
                 onChange(selected.copy(appCaches = !selected.appCaches))
             }
         }
-        ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, available = avFolders) {
-            onChange(selected.copy(sweepFolders = !selected.sweepFolders))
+        // Only offered once a custom folder has been added (Settings > Add Folder).
+        if (hasFolders) {
+            ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, available = true) {
+                onChange(selected.copy(sweepFolders = !selected.sweepFolders))
+            }
         }
         ScheduleToggle(stringResource(R.string.schedule_clean_device_sweep), selected.sweepDevice, available = av) {
             onChange(selected.copy(sweepDevice = !selected.sweepDevice))
@@ -1241,7 +1235,7 @@ private fun CleanupOptionsList(
             }
         }
     }
-    if (!allAvailable && (!hasFolders || !hasStorageAccess || (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R))) {
+    if (!allAvailable && (!hasStorageAccess || (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R))) {
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.schedule_unavailable_hint), color = Muted, fontSize = 13.sp)
     }
