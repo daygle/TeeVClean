@@ -35,6 +35,8 @@ class TeeVViewModelTest {
         every { repository.getScheduleOptions() } returns ScheduleOptions(sweepFolders = true, installedApks = true)
         every { repository.getCleanupHistory() } returns CleanupHistory(1L, 10L, 1)
         every { repository.getCleanupLog() } returns emptyList()
+        every { repository.getLastAutomaticRun() } returns 0L
+        coEvery { repository.getNextScheduledRun(any()) } returns null
         every { repository.getFileFilter() } returns FileFilter()
         coEvery { repository.readStorage() } returns StorageSummary(used = 40, total = 100)
         coEvery { repository.loadApps() } returns listOf(app)
@@ -92,16 +94,52 @@ class TeeVViewModelTest {
 
     @Test
     fun `manual clean-ups are logged with their kind`() {
-        coEvery { repository.clearOwnCache() } returns CleanupResult(100, 2)
         coEvery { repository.deleteFiles(any()) } returns CleanupResult(4096, 1)
         val vm = viewModel()
 
-        vm.clearCache {}
         vm.deleteDuplicates(listOf(file)) {}
         testDispatcher.scheduler.advanceUntilIdle()
 
-        verify { repository.recordCleanup(listOf(CleanupKind.OWN_CACHE), CleanupResult(100, 2), automatic = false) }
         verify { repository.recordCleanup(listOf(CleanupKind.DUPLICATES), CleanupResult(4096, 1), automatic = false) }
+    }
+
+    @Test
+    fun `clean now runs the shared clean-up and logs what finished`() {
+        val options = ScheduleOptions(sweepDevice = true)
+        coEvery { repository.runCleanup(options, any(), any()) } answers {
+            secondArg<MutableList<CleanupKind>>().addAll(listOf(CleanupKind.OWN_CACHE, CleanupKind.SWEEP_DEVICE))
+            thirdArg<MutableList<CleanupResult>>().addAll(listOf(CleanupResult(100, 2), CleanupResult(900, 3)))
+        }
+        val vm = viewModel()
+
+        var reported: CleanupResult? = null
+        vm.cleanNow(options) { reported = it }
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(CleanupResult(1000, 5), reported)
+        verify {
+            repository.recordCleanup(
+                listOf(CleanupKind.OWN_CACHE, CleanupKind.SWEEP_DEVICE),
+                CleanupResult(1000, 5),
+                automatic = false,
+                complete = true,
+            )
+        }
+    }
+
+    @Test
+    fun `clean now records the finished parts when a later part fails`() {
+        coEvery { repository.runCleanup(any(), any(), any()) } answers {
+            secondArg<MutableList<CleanupKind>>().add(CleanupKind.OWN_CACHE)
+            thirdArg<MutableList<CleanupResult>>().add(CleanupResult(100, 2))
+            throw IllegalStateException("storage went away")
+        }
+        val vm = viewModel()
+
+        vm.cleanNow(ScheduleOptions(trash = true)) {}
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { repository.recordCleanup(listOf(CleanupKind.OWN_CACHE), CleanupResult(100, 2), automatic = false, complete = false) }
     }
 
     @Test

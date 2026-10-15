@@ -1,5 +1,6 @@
 package com.teevclean.app
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,8 +30,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +65,28 @@ val Panel = Color(0xFF191E1A)
 val PanelLight = Color(0xFF232B25)
 val Lime = Color(0xFFB7F35B)
 val Muted = Color(0xFF9BA79C)
+
+/**
+ * The app's colours as a Material scheme. Screens set their colours directly, but dialogs take
+ * theirs from the theme; without this they use Material's light defaults, where the app's white
+ * headings and grey buttons are hard to read.
+ */
+private val TeeVColors = darkColorScheme(
+    primary = Lime,
+    onPrimary = Ink,
+    background = Ink,
+    onBackground = Color.White,
+    surface = Panel,
+    onSurface = Color.White,
+    // Dialog background and body text.
+    surfaceContainerHigh = Panel,
+    onSurfaceVariant = Muted,
+)
+
+@Composable
+fun TeeVTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = TeeVColors, content = content)
+}
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -350,6 +375,8 @@ fun StorageCard(storage: StorageSummary, history: CleanupHistory, onClean: () ->
 @Composable
 fun SettingsScreen(
     scheduleSummary: String,
+    /** Last and next automatic run, shown under the summary while a schedule is set. */
+    scheduleTimes: String?,
     customFolders: List<String>,
     hasUsageAccess: Boolean,
     hasStorageAccess: Boolean,
@@ -367,7 +394,13 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_cleanup_schedule), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(scheduleSummary, color = Muted, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(scheduleSummary, color = Muted)
+                            if (scheduleTimes != null) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(scheduleTimes, color = Muted, fontSize = 14.sp)
+                            }
+                        }
                         TvButton(onClick = onEditSchedule) {
                             Text(stringResource(R.string.schedule_change))
                         }
@@ -559,7 +592,7 @@ internal fun folderDisplayName(treeUri: String): String {
         } catch (_: IllegalArgumentException) {
             treeUri.removePrefix("file://")
         }
-        return path.replace(INTERNAL_STORAGE_ROOT, "").trimEnd('/').ifEmpty { "Internal storage" }
+        return path.replace(INTERNAL_STORAGE_ROOT, "").trimEnd('/').ifEmpty { "Internal Storage" }
     }
     val encodedId = treeUri.substringAfter("/tree/", "").substringBefore('/').substringBefore('?')
     // Uri.encode escapes '+', so URLDecoder's '+'-as-space rule never changes a real tree id.
@@ -641,14 +674,17 @@ fun TvTextButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
+    // Outlined so it reads as a button even unfocused; filled lime when focused, like TvButton.
     TextButton(
         onClick = onClick,
         interactionSource = interactionSource,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(if (isFocused) 2.dp else 1.dp, if (isFocused) Lime else Muted),
         colors = ButtonDefaults.textButtonColors(
-            contentColor = if (isFocused) Lime else Muted
+            containerColor = if (isFocused) Lime else Color.Transparent,
+            contentColor = if (isFocused) Ink else Color.White,
         ),
-        modifier = modifier
-            .background(if (isFocused) Color.White.copy(alpha = 0.05f) else Color.Transparent, RoundedCornerShape(8.dp))
+        modifier = modifier,
     ) {
         content()
     }

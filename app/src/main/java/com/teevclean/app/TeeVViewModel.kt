@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -159,6 +160,11 @@ class TeeVViewModel(
         private set
     var cleanupLog by mutableStateOf(repository.getCleanupLog())
         private set
+    var lastAutomaticRun by mutableLongStateOf(repository.getLastAutomaticRun())
+        private set
+    /** Android's estimate for the next scheduled run; null when unknown or nothing is scheduled. */
+    var nextScheduledRun by mutableStateOf<Long?>(null)
+        private set
     var storageBreakdown by mutableStateOf<StorageBreakdown?>(null)
         private set
     var isLoadingBreakdown by mutableStateOf(false)
@@ -188,6 +194,8 @@ class TeeVViewModel(
                 cacheSize = cacheDeferred.await()
                 cleanupHistory = repository.getCleanupHistory()
                 cleanupLog = repository.getCleanupLog()
+                lastAutomaticRun = repository.getLastAutomaticRun()
+                nextScheduledRun = repository.getNextScheduledRun()
                 cleanupFrequency = repository.getCleanupFrequency()
                 scheduleOptions = repository.getScheduleOptions()
                 customFolders = repository.getCustomFolders()
@@ -225,10 +233,25 @@ class TeeVViewModel(
         refreshData()
     }
 
-    fun clearCache(onComplete: (CleanupResult) -> Unit) {
+    /**
+     * Overview's Review Clean-up: the same clean-up as the schedule (TeeVClean's cache plus
+     * [options]), logged as manual. If a part fails, the parts that finished are still recorded.
+     */
+    fun cleanNow(options: ScheduleOptions, onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
-            val result = repository.clearOwnCache()
-            record(CleanupKind.OWN_CACHE, result)
+            val kinds = mutableListOf<CleanupKind>()
+            val results = mutableListOf<CleanupResult>()
+            val finished = try {
+                repository.runCleanup(options, kinds, results)
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            val result = CleanupResult(results.sumOf { it.freedBytes }, results.sumOf { it.itemsRemoved })
+            repository.recordCleanup(kinds, result, automatic = false, complete = finished)
+            invalidateDuplicates()
             refreshData()
             onComplete(result)
         }
@@ -319,6 +342,12 @@ class TeeVViewModel(
         repository.setCleanupSchedule(frequency, options)
         cleanupFrequency = repository.getCleanupFrequency()
         scheduleOptions = repository.getScheduleOptions()
+        // WorkManager plans the new run in the background, so wait briefly for its time.
+        if (frequency == CleanupFrequency.OFF) {
+            nextScheduledRun = null
+        } else {
+            viewModelScope.launch { nextScheduledRun = repository.getNextScheduledRun(waitMillis = 3_000L) }
+        }
     }
 
     fun openAppInfo(packageName: String) = repository.openAppInfo(packageName)
