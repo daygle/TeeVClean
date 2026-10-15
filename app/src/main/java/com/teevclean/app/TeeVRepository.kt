@@ -120,18 +120,22 @@ enum class CleanupKind {
     DUPLICATES,
 }
 
-/** One clean-up in the history log. An automatic run is one entry covering every [kinds] it ran. */
+/**
+ * One clean-up in the history log. An automatic run is one entry covering every [kinds] it
+ * finished; [complete] is false when the run failed or was stopped part-way.
+ */
 data class CleanupLogEntry(
     val time: Long,
     val automatic: Boolean,
     val kinds: List<CleanupKind>,
     val freedBytes: Long,
     val itemsRemoved: Int,
+    val complete: Boolean = true,
 )
 
 /**
  * Line-based storage format for the clean-up log, one entry per line:
- * `time;auto;KIND,KIND;freedBytes;items`. Kept free of Android types so it can be unit-tested.
+ * `time;auto;KIND,KIND;freedBytes;items;complete` (a missing last field means complete). Kept free of Android types so it can be unit-tested.
  * Malformed lines and unknown kinds are skipped rather than failing the whole log.
  */
 object CleanupLogCodec {
@@ -142,13 +146,14 @@ object CleanupLogCodec {
             entry.kinds.joinToString(",") { it.name },
             entry.freedBytes,
             entry.itemsRemoved,
+            if (entry.complete) 1 else 0,
         ).joinToString(";")
     }
 
     fun decode(text: String?): List<CleanupLogEntry> =
         text.orEmpty().lines().mapNotNull { line ->
             val parts = line.split(';')
-            if (parts.size != 5) return@mapNotNull null
+            if (parts.size != 5 && parts.size != 6) return@mapNotNull null
             val kinds = parts[2].split(',').mapNotNull { name -> CleanupKind.entries.firstOrNull { it.name == name } }
             CleanupLogEntry(
                 time = parts[0].toLongOrNull() ?: return@mapNotNull null,
@@ -156,6 +161,7 @@ object CleanupLogCodec {
                 kinds = kinds,
                 freedBytes = parts[3].toLongOrNull() ?: return@mapNotNull null,
                 itemsRemoved = parts[4].toIntOrNull() ?: return@mapNotNull null,
+                complete = parts.getOrNull(5) != "0",
             )
         }
 
@@ -379,9 +385,9 @@ class TeeVRepository(private val context: Context) {
      * one entry.
      */
     @Synchronized
-    fun recordCleanup(kinds: List<CleanupKind>, result: CleanupResult, automatic: Boolean) {
+    fun recordCleanup(kinds: List<CleanupKind>, result: CleanupResult, automatic: Boolean, complete: Boolean = true) {
         val now = System.currentTimeMillis()
-        val entry = CleanupLogEntry(now, automatic, kinds, result.freedBytes, result.itemsRemoved)
+        val entry = CleanupLogEntry(now, automatic, kinds, result.freedBytes, result.itemsRemoved, complete)
         prefs.edit {
             putLong(KEY_LAST_RUN, now)
             putLong(KEY_TOTAL_FREED, prefs.getLong(KEY_TOTAL_FREED, 0L) + result.freedBytes)

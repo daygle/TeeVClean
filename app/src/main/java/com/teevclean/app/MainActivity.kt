@@ -926,7 +926,12 @@ private fun CleanupHistoryScreen(entries: List<CleanupLogEntry>, onClear: () -> 
                 ResultRow(
                     title = dateFormat.format(entry.time),
                     // Android's own cache clear doesn't report a count, so none is shown for it.
-                    subtitle = listOfNotNull(source, what, count.takeIf { CleanupKind.APP_CACHES !in entry.kinds }).joinToString("  ·  "),
+                    subtitle = listOfNotNull(
+                        source,
+                        stringResource(R.string.history_incomplete).takeIf { !entry.complete },
+                        what.ifEmpty { null },
+                        count.takeIf { CleanupKind.APP_CACHES !in entry.kinds },
+                    ).joinToString("  ·  "),
                     amount = formatBytes(entry.freedBytes),
                     safe = true,
                 )

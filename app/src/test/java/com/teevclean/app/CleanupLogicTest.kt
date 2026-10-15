@@ -158,6 +158,7 @@ class CleanupLogicTest {
         val entries = listOf(
             CleanupLogEntry(2000L, true, listOf(CleanupKind.OWN_CACHE, CleanupKind.SWEEP_DEVICE, CleanupKind.TRASH), 5_000_000L, 12),
             CleanupLogEntry(1000L, false, listOf(CleanupKind.APP_CACHES), 0L, 0),
+            CleanupLogEntry(500L, true, emptyList(), 0L, 0, complete = false),
         )
         assertEquals(entries, CleanupLogCodec.decode(CleanupLogCodec.encode(entries)))
         assertEquals(emptyList<CleanupLogEntry>(), CleanupLogCodec.decode(null))
@@ -168,6 +169,7 @@ class CleanupLogicTest {
     fun `cleanup log skips malformed lines and unknown kinds`() {
         val decoded = CleanupLogCodec.decode("garbage\n10;1;OWN_CACHE,FUTURE_KIND;50;1\nx;0;TRASH;1;1")
         assertEquals(listOf(CleanupLogEntry(10L, true, listOf(CleanupKind.OWN_CACHE), 50L, 1)), decoded)
+        assertFalse("explicit incomplete flag", CleanupLogCodec.decode("10;1;OWN_CACHE;50;1;0").single().complete)
     }
 
     @Test

@@ -181,6 +181,7 @@
     <string name="history_empty">No clean-ups recorded yet. Totals from earlier clean-ups are still shown on Overview.</string>
     <string name="history_manual">Manual</string>
     <string name="history_automatic">Automatic</string>
+    <string name="history_incomplete">Stopped early</string>
     <string name="history_clear">Clear History</string>
     <plurals name="history_items">
         <item quantity="one">%1$d item</item>
