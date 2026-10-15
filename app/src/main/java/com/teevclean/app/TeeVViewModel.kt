@@ -149,7 +149,6 @@ class TeeVViewModel(
     /** Custom folders that couldn't be opened on the last refresh, shown as "Not Found". */
     var missingFolders by mutableStateOf(emptySet<String>())
         private set
-        private set
     var cleanupFrequency by mutableStateOf(repository.getCleanupFrequency())
         private set
     var scheduleOptions by mutableStateOf(repository.getScheduleOptions())
