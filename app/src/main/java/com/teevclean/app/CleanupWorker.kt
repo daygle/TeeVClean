@@ -26,6 +26,8 @@ class CleanupWorker(
         return try {
             repository.runCleanup(options, kinds, results)
             finished = true
+            // Keep the schedule on the chosen time however late this run started.
+            repository.scheduleNextRun()
             Result.success()
         } catch (e: CancellationException) {
             throw e

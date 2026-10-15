@@ -2,6 +2,7 @@ package com.teevclean.app
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -148,6 +149,9 @@ class TeeVViewModel(
         private set
     var scheduleOptions by mutableStateOf(repository.getScheduleOptions())
         private set
+    /** Time of day scheduled clean-ups start, in minutes after midnight. */
+    var scheduleMinuteOfDay by mutableIntStateOf(repository.getScheduleMinuteOfDay())
+        private set
     var cacheSize by mutableLongStateOf(0L)
         private set
     var isRefreshing by mutableStateOf(false)
@@ -173,6 +177,11 @@ class TeeVViewModel(
         private set
 
     private var refreshJob: Job? = null
+
+    init {
+        // Schedules from before the time-of-day option get lined up with it once.
+        repository.alignLegacySchedule()
+    }
 
     /**
      * Reloads everything shown on screen. The UI calls this on every resume (which includes
@@ -338,10 +347,11 @@ class TeeVViewModel(
         }
     }
 
-    fun setSchedule(frequency: CleanupFrequency, options: ScheduleOptions) {
-        repository.setCleanupSchedule(frequency, options)
+    fun setSchedule(frequency: CleanupFrequency, options: ScheduleOptions, minuteOfDay: Int) {
+        repository.setCleanupSchedule(frequency, options, minuteOfDay)
         cleanupFrequency = repository.getCleanupFrequency()
         scheduleOptions = repository.getScheduleOptions()
+        scheduleMinuteOfDay = repository.getScheduleMinuteOfDay()
         // WorkManager plans the new run in the background, so wait briefly for its time.
         if (frequency == CleanupFrequency.OFF) {
             nextScheduledRun = null

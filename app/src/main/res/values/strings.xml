@@ -110,6 +110,8 @@
     <string name="confirm_sweep_desc">Remove temp, log and thumbnail files, macOS/Windows/Linux drive metadata and trash folders (._ files, desktop.ini, .Trashes, .Trash-*), torrent pieces untouched for 7 days, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Clean-up</string>
     <string name="schedule_frequency_label">How Often</string>
+    <string name="schedule_time_label">Time</string>
+    <string name="schedule_at">%1$s at %2$s</string>
     <string name="schedule_also_clean">Also Clean</string>
     <string name="schedule_unavailable_hint">Greyed-out options need a custom folder or all files access - see Settings.</string>
     <string name="schedule_footer">TeeVClean\'s own cache is always cleared. Other apps\' caches and your own files are never touched automatically.</string>

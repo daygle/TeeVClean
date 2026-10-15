@@ -182,6 +182,52 @@ class CleanupLogicTest {
         assertEquals(listOf(entry(3L), entry(2L)), log)
     }
 
+    private val utc = java.util.TimeZone.getTimeZone("UTC")
+    private val hour = 60L * 60 * 1000
+    private val day = 24 * hour
+
+    @Test
+    fun `first scheduled run is the next time the clock reaches the chosen time`() {
+        val midnight = 1000 * day
+        // 01:00, time 03:00 -> today at 03:00.
+        assertEquals(midnight + 3 * hour, ScheduleTiming.firstRun(midnight + 1 * hour, 180, utc))
+        // 05:00, time 03:00 -> tomorrow at 03:00.
+        assertEquals(midnight + day + 3 * hour, ScheduleTiming.firstRun(midnight + 5 * hour, 180, utc))
+        // Exactly 03:00 -> tomorrow, not now.
+        assertEquals(midnight + day + 3 * hour, ScheduleTiming.firstRun(midnight + 3 * hour, 180, utc))
+    }
+
+    @Test
+    fun `next scheduled run keeps the chosen time and skips runs already missed`() {
+        val planned = 1000 * day + 3 * hour
+        // Weekly run that started 5 hours late: next is still a week after the planned one, at 03:00.
+        assertEquals(planned + 7 * day, ScheduleTiming.nextRun(planned, 7, 180, now = planned + 5 * hour, timeZone = utc))
+        // Daily schedule, TV asleep for three days: next is the first 03:00 still ahead.
+        assertEquals(planned + 4 * day, ScheduleTiming.nextRun(planned, 1, 180, now = planned + 3 * day + 2 * hour, timeZone = utc))
+        // A changed time applies from the next run.
+        assertEquals(1001 * day + 22 * hour + 30 * 60 * 1000, ScheduleTiming.nextRun(planned, 1, 22 * 60 + 30, now = planned + hour, timeZone = utc))
+    }
+
+    @Test
+    fun `next scheduled run keeps the wall-clock time across daylight saving`() {
+        val sydney = java.util.TimeZone.getTimeZone("Australia/Sydney")
+        // 2026-10-03 03:00 local; clocks go forward on 2026-10-04.
+        val planned = java.util.Calendar.getInstance(sydney).apply { clear(); set(2026, 9, 3, 3, 0) }.timeInMillis
+        val next = ScheduleTiming.nextRun(planned, 7, 180, now = planned + hour, timeZone = sydney)
+        val local = java.util.Calendar.getInstance(sydney).apply { timeInMillis = next }
+        assertEquals(10, local.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(3, local.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(0, local.get(java.util.Calendar.MINUTE))
+    }
+
+    @Test
+    fun `time picker steps by half an hour and wraps around midnight`() {
+        assertEquals(210, ScheduleTiming.step(180, 1))
+        assertEquals(150, ScheduleTiming.step(180, -1))
+        assertEquals(23 * 60 + 30, ScheduleTiming.step(0, -1))
+        assertEquals(0, ScheduleTiming.step(23 * 60 + 30, 1))
+    }
+
     @Test
     fun `installer is redundant only when installed at same or newer version`() {
         assertTrue(FileClassifier.isInstallerRedundant(archiveVersion = 10, installedVersion = 10))
