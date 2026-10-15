@@ -171,13 +171,13 @@
         <item quantity="one">Delete %1$d extra copy</item>
         <item quantity="other">Delete %1$d extra copies</item>
     </plurals>
-    <string name="storage_breakdown">Storage Breakdown</string>
-    <string name="storage_breakdown_desc">Where your space has gone - user apps (with their cache) versus the system and everything else.</string>
-    <string name="breakdown_apps">Apps &amp; data</string>
-    <string name="breakdown_app_cache">of which cache</string>
-    <string name="breakdown_system_other">System &amp; other</string>
+    <string name="storage_breakdown">Storage</string>
+    <string name="storage_breakdown_desc">See what\'s using space on your TV - apps, the system, and how much is free.</string>
+    <string name="breakdown_apps">Apps and their data</string>
+    <string name="breakdown_app_cache">Temporary files (cache)</string>
+    <string name="breakdown_system_other">System and other files</string>
     <string name="breakdown_free">Free</string>
-    <string name="breakdown_needs_usage">Grant Usage Access (Applications) to attribute space to individual apps.</string>
+    <string name="breakdown_needs_usage">To see how much space your apps use, allow Usage Access in Settings.</string>
 
     <string name="history_never">never</string>
     <string name="history_title">Clean-up History</string>
