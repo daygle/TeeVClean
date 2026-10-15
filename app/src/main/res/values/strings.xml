@@ -7,7 +7,7 @@
     <string name="device_health">Device Health</string>
     <string name="settings">Settings</string>
 
-    <string name="greeting">Your TV, revitalized.</string>
+    <string name="greeting">Your TV, Revitalized.</string>
     <string name="sub_greeting">Simple maintenance for a smoother experience.</string>
     <string name="safe_tools_title">Maintenance &amp; Analysis</string>
 
@@ -18,17 +18,17 @@
     </plurals>
     <string name="feature_device_health_desc">Storage pressure, network, uptime and system details</string>
 
-    <string name="privacy_title">Your privacy comes first</string>
+    <string name="privacy_title">Your Privacy Comes First</string>
     <string name="privacy_desc">No silent deletion and no fake RAM boosts. You approve every cleanup action.</string>
 
     <string name="storage_health_label">Storage Health</string>
-    <string name="used_of_total">%1$s of %2$s used</string>
-    <string name="available_space_label">available space</string>
+    <string name="used_of_total">%1$s of %2$s Used</string>
+    <string name="available_space_label">Available Space</string>
     <string name="review_cleanup">Review Clean-up</string>
-    <string name="review_always_included">Always included: TeeVClean cache (%1$s)</string>
+    <string name="review_always_included">Always Included: TeeVClean Cache (%1$s)</string>
     <string name="review_footer">Other apps\' caches and your own files are never touched here - use Application Caches, Files or Duplicates for those.</string>
     <string name="clean_now">Clean Now</string>
-    <string name="cleaning_in_progress">Cleaning up…</string>
+    <string name="cleaning_in_progress">Cleaning Up…</string>
 
     <string name="cleanup_desc">Scan temporary files and review every item before removal.</string>
     <string name="this_app_cache">TeeVClean Cache</string>
@@ -48,7 +48,7 @@
 
     <string name="app_review_desc">Apps are sorted by storage used. Without usage access, sizes cover the installed app only and last-used dates are unavailable.</string>
     <string name="app_review_cache_hint">To clear another app\'s cache, open it here, then choose Storage &#8250; Clear cache. Android does not allow apps to clear each other\'s caches directly.</string>
-    <string name="usage_hint_title">Show last-used dates</string>
+    <string name="usage_hint_title">Show Last-Used Dates</string>
     <string name="usage_hint_desc">Grant Usage Access to see when each app was last opened. App sizes and cache guidance work without it.</string>
     <string name="app_info_btn">App Info</string>
 
@@ -77,8 +77,8 @@
     <string name="schedule_clean_installed_apks">Installers (Already Installed)</string>
     <string name="schedule_clean_trash">Trash</string>
 
-    <string name="last_used_unavailable">Last used unavailable</string>
-    <string name="last_used_at">Last used %1$s</string>
+    <string name="last_used_unavailable">Last Used Unavailable</string>
+    <string name="last_used_at">Last Used %1$s</string>
     <string name="version_footer">TeeVClean  ·  v%1$s</string>
 
     <string name="scanning">Scanning…</string>
@@ -88,12 +88,12 @@
     <string name="settings_permissions">Application Permission</string>
     <string name="settings_usage_access">Usage Access</string>
     <string name="settings_usage_access_granted">Granted</string>
-    <string name="settings_usage_access_denied">Not granted</string>
+    <string name="settings_usage_access_denied">Not Granted</string>
     <string name="settings_usage_access_desc">Required to show when apps were last used and for the detailed storage breakdown.</string>
     <string name="settings_storage_access">Folder Access</string>
     <string name="settings_storage_access_desc">Required to scan custom folders for large and duplicate files.</string>
     <string name="settings_storage_access_granted">Granted</string>
-    <string name="settings_storage_access_denied">Not granted</string>
+    <string name="settings_storage_access_denied">Not Granted</string>
     <string name="settings_scanned_folders">Custom Folders</string>
     <string name="settings_scanned_folders_desc">Folders added for downloads, media and duplicate scanning. Add the folders you want scanned here.</string>
     <string name="settings_no_folders">No custom folders added yet.</string>
@@ -109,8 +109,8 @@
     <string name="delete">Delete</string>
     <string name="confirm_sweep_desc">Remove temp, log and thumbnail files, macOS/Windows/Linux drive metadata and trash folders (._ files, desktop.ini, .Trashes, .Trash-*), torrent pieces untouched for 7 days, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Clean-up</string>
-    <string name="schedule_frequency_label">How often</string>
-    <string name="schedule_also_clean">Also clean</string>
+    <string name="schedule_frequency_label">How Often</string>
+    <string name="schedule_also_clean">Also Clean</string>
     <string name="schedule_unavailable_hint">Greyed-out options need a custom folder or all files access - see Settings.</string>
     <string name="schedule_footer">TeeVClean\'s own cache is always cleared. Other apps\' caches and your own files are never touched automatically.</string>
     <string name="freq_off">Off</string>
@@ -118,13 +118,13 @@
     <string name="freq_weekly">Weekly</string>
     <string name="freq_monthly">Monthly</string>
     <plurals name="schedule_with_extras">
-        <item quantity="one">%1$s · plus %2$d extra clean-up</item>
-        <item quantity="other">%1$s · plus %2$d extra clean-ups</item>
+        <item quantity="one">%1$s · Plus %2$d Extra Clean-up</item>
+        <item quantity="other">%1$s · Plus %2$d Extra Clean-ups</item>
     </plurals>
     <string name="schedule_change">Change</string>
-    <string name="schedule_last_run">Last run: %1$s</string>
-    <string name="schedule_next_run">Next run: about %1$s</string>
-    <string name="schedule_next_run_unknown">Next run: waiting for Android</string>
+    <string name="schedule_last_run">Last Run: %1$s</string>
+    <string name="schedule_next_run">Next Run: About %1$s</string>
+    <string name="schedule_next_run_unknown">Next Run: Waiting for Android</string>
     <string name="save">Save</string>
 
     <string name="cleanup_complete">Clean-up Complete</string>
@@ -132,7 +132,7 @@
     <string name="done">Done</string>
     <string name="folder_picker_needs_access">This TV has no system folder picker. Allow all files access for TeeVClean, then choose Add Folder again to pick one here.</string>
     <string name="folder_browser_title">Choose a Folder</string>
-    <string name="folder_browser_up">Up one level</string>
+    <string name="folder_browser_up">Up One Level</string>
     <string name="folder_browser_use">Use This Folder</string>
     <string name="folder_browser_empty">No folders inside this one.</string>
     <string name="feature_not_supported">System file picker missing. Opening settings to allow a full drive scan instead.</string>
@@ -144,20 +144,20 @@
     </plurals>
 
     <string name="filter_installers">Installers</string>
-    <string name="filter_already_installed">Already installed</string>
-    <string name="installed_suffix">%1$s · app already installed</string>
-    <string name="select_all">Select all</string>
+    <string name="filter_already_installed">Already Installed</string>
+    <string name="installed_suffix">%1$s · App Already Installed</string>
+    <string name="select_all">Select All</string>
     <string name="clear_selection">Clear</string>
-    <string name="delete_selected">Delete selected (%1$d)</string>
-    <string name="confirm_delete_files">Delete selected files?</string>
+    <string name="delete_selected">Delete Selected (%1$d)</string>
+    <string name="confirm_delete_files">Delete Selected Files?</string>
     <plurals name="confirm_delete_files_desc">
         <item quantity="one">%1$d file (%2$s) will be permanently deleted. This cannot be undone.</item>
         <item quantity="other">%1$d files (%2$s) will be permanently deleted. This cannot be undone.</item>
     </plurals>
 
-    <string name="rarely_used_title">Rarely used (90+ days)</string>
+    <string name="rarely_used_title">Rarely Used (90+ Days)</string>
     <string name="rarely_used_desc">Apps you haven\'t opened in over 3 months. Uninstall to reclaim space.</string>
-    <string name="all_apps_title">All apps by size</string>
+    <string name="all_apps_title">All Apps by Size</string>
     <string name="uninstall">Uninstall</string>
 
     <string name="duplicates">Duplicates</string>
@@ -166,12 +166,12 @@
     <string name="no_duplicates">No duplicate files found in your added folders.</string>
     <string name="rescan">Rescan</string>
     <plurals name="duplicate_group">
-        <item quantity="one">%1$d copy · %2$s each</item>
-        <item quantity="other">%1$d copies · %2$s each</item>
+        <item quantity="one">%1$d Copy · %2$s Each</item>
+        <item quantity="other">%1$d Copies · %2$s Each</item>
     </plurals>
     <plurals name="delete_extras">
-        <item quantity="one">Delete %1$d extra copy</item>
-        <item quantity="other">Delete %1$d extra copies</item>
+        <item quantity="one">Delete %1$d Extra Copy</item>
+        <item quantity="other">Delete %1$d Extra Copies</item>
     </plurals>
     <string name="storage_breakdown">Storage</string>
     <string name="storage_breakdown_desc">See what is using space on your TV: applications, the system, and how much space is free.</string>
@@ -181,43 +181,43 @@
     <string name="breakdown_free">Free Space</string>
     <string name="breakdown_needs_usage">To see how much space your applications use, allow Usage Access in Settings.</string>
 
-    <string name="history_never">never</string>
+    <string name="history_never">Never</string>
     <string name="history_title">Clean-up History</string>
     <string name="history_card_desc">Every manual and automatic clean-up, with what it freed</string>
     <string name="history_desc">Your last 50 clean-ups, newest first.</string>
     <string name="history_empty">No clean-ups recorded yet. Totals from earlier clean-ups are still shown on Overview.</string>
     <string name="history_manual">Manual</string>
     <string name="history_automatic">Automatic</string>
-    <string name="history_incomplete">Stopped early</string>
+    <string name="history_incomplete">Stopped Early</string>
     <string name="history_clear">Clear History</string>
     <plurals name="history_items">
-        <item quantity="one">%1$d item</item>
-        <item quantity="other">%1$d items</item>
+        <item quantity="one">%1$d Item</item>
+        <item quantity="other">%1$d Items</item>
     </plurals>
-    <string name="history_last_run">Last run: %1$s</string>
+    <string name="history_last_run">Last Run: %1$s</string>
     <plurals name="history_total_freed">
         <item quantity="one">Freed %1$s across %2$d item in total.</item>
         <item quantity="other">Freed %1$s across %2$d items in total.</item>
     </plurals>
-    <string name="remove_folder">Remove folder</string>
+    <string name="remove_folder">Remove Folder</string>
     <string name="add_folder">Add Folder</string>
     <string name="folder_grant_failed">Android didn\'t allow lasting access to that folder. Please choose another one.</string>
-    <string name="about_version">TeeVClean version %1$s</string>
+    <string name="about_version">TeeVClean Version %1$s</string>
 
-    <string name="confirm_delete_dupes">Delete duplicate copies?</string>
+    <string name="confirm_delete_dupes">Delete Duplicate Copies?</string>
     <plurals name="confirm_delete_dupes_desc">
         <item quantity="one">%1$d copy will be removed, keeping 1. Frees %2$s.</item>
         <item quantity="other">%1$d copies will be removed, keeping 1. Frees %2$s.</item>
     </plurals>
 
     <string name="filter_settings">File Filter Settings</string>
-    <string name="filter_min_size">Minimum size</string>
-    <string name="filter_min_age">Minimum age</string>
-    <string name="filter_show_installers">Include installer APKs</string>
+    <string name="filter_min_size">Minimum Size</string>
+    <string name="filter_min_age">Minimum Age</string>
+    <string name="filter_show_installers">Include Installer APKs</string>
     <string name="filter_size_unit_mb">%1$d MB</string>
     <string name="filter_size_unit_gb">%1$d GB</string>
     <plurals name="filter_age_unit_days">
-        <item quantity="one">%1$d day</item>
-        <item quantity="other">%1$d days</item>
+        <item quantity="one">%1$d Day</item>
+        <item quantity="other">%1$d Days</item>
     </plurals>
 </resources>

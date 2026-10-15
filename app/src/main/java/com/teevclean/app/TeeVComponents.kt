@@ -592,7 +592,7 @@ internal fun folderDisplayName(treeUri: String): String {
         } catch (_: IllegalArgumentException) {
             treeUri.removePrefix("file://")
         }
-        return path.replace(INTERNAL_STORAGE_ROOT, "").trimEnd('/').ifEmpty { "Internal storage" }
+        return path.replace(INTERNAL_STORAGE_ROOT, "").trimEnd('/').ifEmpty { "Internal Storage" }
     }
     val encodedId = treeUri.substringAfter("/tree/", "").substringBefore('/').substringBefore('?')
     // Uri.encode escapes '+', so URLDecoder's '+'-as-space rule never changes a real tree id.

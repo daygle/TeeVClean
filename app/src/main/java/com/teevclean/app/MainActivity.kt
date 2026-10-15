@@ -920,7 +920,7 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
     val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     ScreenScaffold(stringResource(R.string.device_health), stringResource(R.string.device_health_desc)) {
         ScreenList(spacing = 10.dp) {
-            item { ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% used", storage.fraction <= .85f) }
+            item { ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% Used", storage.fraction <= .85f) }
             item { ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network) }
             item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true) }
             item { ResultRow(stringResource(R.string.device_model), Build.MANUFACTURER, Build.MODEL, true) }
