@@ -941,8 +941,6 @@ private fun ScheduleDialog(
         title = { Text(stringResource(R.string.schedule_title), color = Muted) },
         text = {
             Column(Modifier.verticalScroll(scrollState)) {
-                Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 15.sp)
-                Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -951,49 +949,34 @@ private fun ScheduleDialog(
                     SelectableChip(stringResource(R.string.freq_weekly), frequency == CleanupFrequency.WEEKLY) { frequency = CleanupFrequency.WEEKLY }
                     SelectableChip(stringResource(R.string.freq_monthly), frequency == CleanupFrequency.MONTHLY) { frequency = CleanupFrequency.MONTHLY }
                 }
-                Spacer(Modifier.height(18.dp))
-                Text(stringResource(R.string.schedule_items_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.schedule_clean_own_cache), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SelectableChip(
-                        stringResource(R.string.schedule_clean_sweep),
-                        selected = selected.sweepFolders && hasFolders,
-                        enabled = hasFolders,
-                    ) { selected = selected.copy(sweepFolders = !selected.sweepFolders) }
-                    SelectableChip(
-                        stringResource(R.string.schedule_clean_device_sweep),
-                        selected = selected.sweepDevice && hasStorageAccess,
-                        enabled = hasStorageAccess,
-                    ) { selected = selected.copy(sweepDevice = !selected.sweepDevice) }
-                    SelectableChip(
-                        stringResource(R.string.schedule_clean_installed_apks),
-                        selected = selected.installedApks && installersAvailable,
-                        enabled = installersAvailable,
-                    ) { selected = selected.copy(installedApks = !selected.installedApks) }
-                    if (trashSupported) {
-                        SelectableChip(
-                            stringResource(R.string.schedule_clean_trash),
-                            selected = selected.trash && hasStorageAccess,
-                            enabled = hasStorageAccess,
-                        ) { selected = selected.copy(trash = !selected.trash) }
+                // The extras only matter when something is scheduled; hiding them keeps "Off" simple.
+                if (frequency != CleanupFrequency.OFF) {
+                    Spacer(Modifier.height(20.dp))
+                    Text(stringResource(R.string.schedule_also_clean), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, hasFolders) {
+                            selected = selected.copy(sweepFolders = !selected.sweepFolders)
+                        }
+                        ScheduleToggle(stringResource(R.string.schedule_clean_device_sweep), selected.sweepDevice, hasStorageAccess) {
+                            selected = selected.copy(sweepDevice = !selected.sweepDevice)
+                        }
+                        ScheduleToggle(stringResource(R.string.schedule_clean_installed_apks), selected.installedApks, installersAvailable) {
+                            selected = selected.copy(installedApks = !selected.installedApks)
+                        }
+                        if (trashSupported) {
+                            ScheduleToggle(stringResource(R.string.schedule_clean_trash), selected.trash, hasStorageAccess) {
+                                selected = selected.copy(trash = !selected.trash)
+                            }
+                        }
+                    }
+                    if (!hasFolders || !hasStorageAccess) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(stringResource(R.string.schedule_unavailable_hint), color = Muted, fontSize = 13.sp)
                     }
                 }
-                if (!hasFolders) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 14.sp)
-                }
-                if (!hasStorageAccess) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.schedule_needs_storage_access), color = Muted, fontSize = 14.sp)
-                }
-                Spacer(Modifier.height(18.dp))
-                Text(stringResource(R.string.schedule_not_included_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.schedule_excluded_app_caches), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.schedule_excluded_files), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(20.dp))
+                Text(stringResource(R.string.schedule_footer), color = Muted, fontSize = 13.sp)
             }
         },
         confirmButton = {
@@ -1015,6 +998,13 @@ private fun ScheduleDialog(
         },
         dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** An on/off option in the schedule dialog; a tick marks it as on, since chip colour alone is easy to miss. */
+@Composable
+private fun ScheduleToggle(label: String, on: Boolean, available: Boolean, onFlip: () -> Unit) {
+    val active = on && available
+    SelectableChip(if (active) "✓  $label" else label, selected = active, enabled = available, onClick = onFlip)
 }
 
 @Composable
