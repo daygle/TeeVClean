@@ -71,7 +71,7 @@
 
     <string name="confirm_cleanup">Confirm Clean-up</string>
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
-    <string name="schedule_clean_own_cache">TeeVClean cache</string>
+    <string name="schedule_clean_own_cache">TeeVClean cache - always included</string>
     <string name="schedule_clean_sweep">Temporary/log files in custom folders</string>
     <string name="remove_cache">Remove Cache</string>
 
@@ -107,13 +107,16 @@
     <string name="delete">Delete</string>
     <string name="confirm_sweep_desc">Remove temp, log and thumbnail files, macOS/Windows/Linux drive metadata and trash folders (._ files, desktop.ini, .Trashes, .Trash-*), torrent pieces untouched for 7 days, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Clean-up</string>
-    <string name="schedule_desc">Runs on its own in the background. Only actions that need no confirmation are included - never your files or other apps\' caches.</string>
+    <string name="schedule_desc">Runs in the background without asking you. Only clean-ups that are safe without your confirmation can be scheduled.</string>
     <string name="schedule_frequency_label">How often</string>
     <string name="freq_off">Off</string>
     <string name="freq_daily">Daily</string>
     <string name="freq_weekly">Weekly</string>
     <string name="freq_monthly">Monthly</string>
     <string name="schedule_items_label">What to clean</string>
+    <string name="schedule_not_included_label">Not included</string>
+    <string name="schedule_excluded_app_caches">Other apps\' caches - Android asks you to confirm every time, so clear them from Clean-up.</string>
+    <string name="schedule_excluded_files">Files and Duplicates - deleting your files always needs your review.</string>
     <string name="schedule_sweep_needs_folder">Add a custom folder in Settings to enable this.</string>
     <string name="schedule_with_sweep">%1$s · incl. temp sweep</string>
     <string name="schedule_change">Change</string>

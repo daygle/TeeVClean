@@ -467,13 +467,16 @@ private fun CleanupScreen(
                         onClick = onClearAllCaches,
                     )
                 }
-            }
-            item {
-                ActionRow(
-                    stringResource(R.string.other_app_caches),
-                    stringResource(R.string.other_app_caches_desc),
-                    stringResource(R.string.action_open),
-                ) { onNavigate(Screen.APPS) }
+            } else {
+                // Before Android 11 there is no clear-all screen, so per-app info pages are the
+                // only way to clear other apps' caches.
+                item {
+                    ActionRow(
+                        stringResource(R.string.other_app_caches),
+                        stringResource(R.string.other_app_caches_desc),
+                        stringResource(R.string.action_open),
+                    ) { onNavigate(Screen.APPS) }
+                }
             }
             item {
                 ActionRow(
@@ -923,6 +926,12 @@ private fun ScheduleDialog(
                     Spacer(Modifier.height(8.dp))
                     Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 14.sp)
                 }
+                Spacer(Modifier.height(18.dp))
+                Text(stringResource(R.string.schedule_not_included_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.schedule_excluded_app_caches), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.schedule_excluded_files), color = Muted, fontSize = 14.sp)
             }
         },
         confirmButton = { TvButton(onClick = { onSave(frequency, sweep && hasFolders) }) { Text(stringResource(R.string.save)) } },
