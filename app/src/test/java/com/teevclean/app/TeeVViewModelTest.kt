@@ -43,6 +43,7 @@ class TeeVViewModelTest {
         coEvery { repository.loadApps() } returns listOf(app)
         coEvery { repository.scanLargeFiles() } returns listOf(file)
         coEvery { repository.getCacheSize() } returns 123L
+        coEvery { repository.unreachableFolders(any()) } returns emptySet()
     }
 
     @After
@@ -59,6 +60,15 @@ class TeeVViewModelTest {
         assertEquals(CleanupFrequency.WEEKLY, vm.cleanupFrequency)
         assertEquals(ScheduleOptions(sweepFolders = true, installedApks = true), vm.scheduleOptions)
         assertEquals(listOf("content://tree/a"), vm.customFolders)
+    }
+
+    @Test
+    fun `refresh flags custom folders that cannot be opened`() {
+        coEvery { repository.unreachableFolders(listOf("content://tree/a")) } returns setOf("content://tree/a")
+        val vm = viewModel()
+        vm.refreshData()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(setOf("content://tree/a"), vm.missingFolders)
     }
 
     @Test

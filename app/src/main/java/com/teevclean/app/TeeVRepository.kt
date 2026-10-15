@@ -342,6 +342,29 @@ class TeeVRepository(private val context: Context) {
         }
     }
 
+    /**
+     * The custom folders that can't be opened right now: deleted, on an unplugged drive, or
+     * no longer granted. Clean-up just skips them, so Settings flags them for the user.
+     */
+    suspend fun unreachableFolders(folders: List<String>): Set<String> = withContext(Dispatchers.IO) {
+        folders.filterNot { isFolderReachable(it) }.toSet()
+    }
+
+    private fun isFolderReachable(folder: String): Boolean = try {
+        val uri = folder.toUri()
+        if (uri.scheme == "file") {
+            uri.path?.let { File(it) }?.let { it.isDirectory && it.canRead() } == true
+        } else {
+            val rootUri = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
+            context.contentResolver.query(rootUri, arrayOf(Document.COLUMN_DOCUMENT_ID), null, null, null)
+                ?.use { it.moveToFirst() } == true
+        }
+    } catch (_: Exception) {
+        // SecurityException once the grant is gone; IllegalArgumentException and the like when
+        // the provider no longer knows the document.
+        false
+    }
+
     fun hasFullStorageAccess(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()

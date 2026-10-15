@@ -383,6 +383,8 @@ fun SettingsScreen(
     /** Last and next automatic run, shown under the summary while a schedule is set. */
     scheduleTimes: String?,
     customFolders: List<String>,
+    /** Folders TeeVClean couldn't open; clean-up skips them until they are back. */
+    missingFolders: Set<String>,
     hasUsageAccess: Boolean,
     hasStorageAccess: Boolean,
     appVersion: String,
@@ -486,6 +488,10 @@ fun SettingsScreen(
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Text("📁 $displayName", color = if (isFocused) Color.White else Muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (folder in missingFolders) {
+                                    Text(stringResource(R.string.folder_not_found), color = Color(0xFFFFB74D), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(12.dp))
+                                }
                                 Text(stringResource(R.string.remove_folder), color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         } }

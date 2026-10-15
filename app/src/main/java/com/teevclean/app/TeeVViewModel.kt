@@ -145,6 +145,10 @@ class TeeVViewModel(
         private set
     var customFolders by mutableStateOf(repository.getCustomFolders())
         private set
+
+    /** Custom folders that couldn't be opened on the last refresh, shown as "Not Found". */
+    var missingFolders by mutableStateOf(emptySet<String>())
+        private set
     var cleanupFrequency by mutableStateOf(repository.getCleanupFrequency())
         private set
     var scheduleOptions by mutableStateOf(repository.getScheduleOptions())
@@ -208,6 +212,7 @@ class TeeVViewModel(
                 cleanupFrequency = repository.getCleanupFrequency()
                 scheduleOptions = repository.getScheduleOptions()
                 customFolders = repository.getCustomFolders()
+                missingFolders = repository.unreachableFolders(customFolders)
             } finally {
                 // A superseded refresh must not clear the flag while its replacement is running.
                 if (refreshJob === coroutineContext[Job]) isRefreshing = false
