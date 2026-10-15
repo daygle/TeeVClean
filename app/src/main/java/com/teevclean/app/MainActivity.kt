@@ -203,6 +203,8 @@ fun TeeVCleanApp(
     var lastBackPress by remember { mutableLongStateOf(0L) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val contentFocus = remember { FocusRequester() }
+    // The sidebar item for the current screen; Back and D-pad Left from the content land here.
+    val sidebarFocus = remember { FocusRequester() }
     // Whether D-pad focus was last in the content pane (rather than the sidebar).
     val focusWasInContent = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -230,7 +232,10 @@ fun TeeVCleanApp(
     }
 
     BackHandler {
-        if (viewModel.currentScreen != Screen.OVERVIEW) {
+        if (focusWasInContent.value) {
+            // Back from the content returns to the menu first, like D-pad Left.
+            sidebarFocus.tryRequestFocus()
+        } else if (viewModel.currentScreen != Screen.OVERVIEW) {
             viewModel.currentScreen = Screen.OVERVIEW
         } else {
             val now = SystemClock.elapsedRealtime()
@@ -285,7 +290,7 @@ fun TeeVCleanApp(
                     .onFocusChanged { if (!it.hasFocus && focusWasInContent.value) restoreContentFocus() }
             ) {
                 Box(Modifier.onFocusChanged { if (it.hasFocus) focusWasInContent.value = false }) {
-                    Sidebar(viewModel.currentScreen) { viewModel.currentScreen = it }
+                    Sidebar(viewModel.currentScreen, sidebarFocus) { viewModel.currentScreen = it }
                 }
                 Spacer(Modifier.width(32.dp))
                 Box(
