@@ -194,17 +194,13 @@ class MainActivity : ComponentActivity() {
             then()
             return
         }
-        val intent = Intent(StorageManager.ACTION_CLEAR_APP_CACHE)
-        if (intent.resolveActivity(packageManager) == null) {
-            Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
-            viewModel.openStorageManager()
-            then()
-            return
-        }
+        // No resolveActivity() pre-check: package visibility (Android 11+) hides the system
+        // handler from it, so it reports "missing" even where the prompt exists. The catch
+        // below handles devices that really don't have it.
         freeBeforeCacheClear = viewModel.freeBytes()
         afterCacheClear = then
         try {
-            clearCachesLauncher.launch(intent)
+            clearCachesLauncher.launch(Intent(StorageManager.ACTION_CLEAR_APP_CACHE))
         } catch (_: Exception) {
             // ActivityNotFoundException on TVs without the screen; SecurityException if access was just revoked.
             afterCacheClear = null
