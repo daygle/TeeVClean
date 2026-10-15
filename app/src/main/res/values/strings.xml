@@ -71,10 +71,10 @@
 
     <string name="confirm_cleanup">Confirm Clean-up</string>
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
-    <string name="schedule_clean_sweep">Junk files in your added folders</string>
-    <string name="schedule_clean_device_sweep">Junk files across all storage</string>
-    <string name="schedule_clean_installed_apks">Installers for apps you already have</string>
-    <string name="schedule_clean_trash">Android trash</string>
+    <string name="schedule_clean_sweep">Junk Files (Custom Folders)</string>
+    <string name="schedule_clean_device_sweep">Junk Files (All Storage)</string>
+    <string name="schedule_clean_installed_apks">Installers (Already Installed)</string>
+    <string name="schedule_clean_trash">Trash</string>
     <string name="remove_cache">Remove Cache</string>
 
     <string name="last_used_unavailable">Last used unavailable</string>
@@ -112,7 +112,7 @@
     <string name="schedule_title">Automatic Clean-up</string>
     <string name="schedule_frequency_label">How often</string>
     <string name="schedule_also_clean">Also clean</string>
-    <string name="schedule_unavailable_hint">Greyed-out options need an added folder or all files access - see Settings.</string>
+    <string name="schedule_unavailable_hint">Greyed-out options need a custom folder or all files access - see Settings.</string>
     <string name="schedule_footer">TeeVClean\'s own cache is always cleared. Other apps\' caches and your own files are never touched automatically.</string>
     <string name="freq_off">Off</string>
     <string name="freq_daily">Daily</string>
