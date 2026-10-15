@@ -25,7 +25,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -114,11 +113,20 @@ class MainActivity : ComponentActivity() {
     /** Free space just before the clear-all-caches prompt opened, to report what it freed. */
     private var freeBeforeCacheClear = 0L
 
+    /** What runs once the clear-all-caches prompt has closed (Overview's Clean-up continues with its other options). */
+    private var afterCacheClear: (() -> Unit)? = null
+
     private val clearCachesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val then = afterCacheClear ?: {}
+        afterCacheClear = null
         if (result.resultCode == RESULT_OK) {
+            // Measured before [then] starts, so space it frees isn't counted as cleared caches.
             viewModel.onSystemCachesCleared(freeBeforeCacheClear) { freed ->
                 Toast.makeText(this, getString(R.string.app_caches_cleared, formatBytes(freed)), Toast.LENGTH_LONG).show()
+                then()
             }
+        } else {
+            then()
         }
     }
 
@@ -144,7 +152,7 @@ class MainActivity : ComponentActivity() {
                     },
                     // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
                     onAddFolder = ::pickFolder,
-                    onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ::clearAllAppCaches else null,
+                    onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { then -> clearAllAppCaches(then) } else null,
                 )
             }
         }
@@ -171,28 +179,38 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Opens Android's own "clear all app caches" confirmation (Android 11+). Android only offers
-     * it to apps holding all-files access, so that is requested first when missing.
+     * it to apps holding all-files access, so that is requested first when missing. [then] runs
+     * once the prompt has closed (or straight away when it can't open), after what it freed has
+     * been measured.
      */
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun clearAllAppCaches() {
+    private fun clearAllAppCaches(then: () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            then()
+            return
+        }
         if (!Environment.isExternalStorageManager()) {
             Toast.makeText(this, R.string.clear_caches_needs_access, Toast.LENGTH_LONG).show()
             openAllFilesAccessSettings()
+            then()
             return
         }
         val intent = Intent(StorageManager.ACTION_CLEAR_APP_CACHE)
         if (intent.resolveActivity(packageManager) == null) {
             Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
             viewModel.openStorageManager()
+            then()
             return
         }
         freeBeforeCacheClear = viewModel.freeBytes()
+        afterCacheClear = then
         try {
             clearCachesLauncher.launch(intent)
         } catch (_: Exception) {
             // ActivityNotFoundException on TVs without the screen; SecurityException if access was just revoked.
+            afterCacheClear = null
             Toast.makeText(this, R.string.clear_caches_unavailable, Toast.LENGTH_LONG).show()
             viewModel.openStorageManager()
+            then()
         }
     }
 
@@ -221,7 +239,8 @@ fun TeeVCleanApp(
     viewModel: TeeVViewModel,
     onRequestStorageAccess: () -> Unit,
     onAddFolder: () -> Unit,
-    onClearAllCaches: (() -> Unit)?,
+    /** Opens Android's clear-all-caches prompt (Android 11+), then runs the given continuation once it closes. */
+    onClearAllCaches: ((then: () -> Unit) -> Unit)?,
 ) {
     var showCleanup by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
@@ -306,10 +325,18 @@ fun TeeVCleanApp(
             // Closed straight away: a device-wide sweep can take a while, and a second press
             // must not start a second run.
             showCleanup = false
-            Toast.makeText(context, R.string.cleaning_in_progress, Toast.LENGTH_SHORT).show()
-            viewModel.cleanNow(options) { result -> cleanupResult = result }
-            if (options.appCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                onClearAllCaches?.invoke()
+            val cleanTheRest = {
+                Toast.makeText(context, R.string.cleaning_in_progress, Toast.LENGTH_SHORT).show()
+                viewModel.cleanNow(options.copy(appCaches = false)) { result -> cleanupResult = result }
+            }
+            val clearCaches = onClearAllCaches
+            if (options.appCaches && clearCaches != null) {
+                // The same flow as Clean-up > Application Caches: Android's own confirmation first,
+                // then the other options once it closes, so the two never overlap and the space
+                // the caches freed is measured on its own.
+                clearCaches(cleanTheRest)
+            } else {
+                cleanTheRest()
             }
         }
     }
@@ -398,7 +425,7 @@ fun TeeVCleanApp(
                             onSweep = { showSweep = true },
                             onFindDuplicates = { viewModel.currentScreen = Screen.DUPLICATES },
                             onFreeUpSpace = { viewModel.openStorageManager() },
-                            onClearAllCaches = onClearAllCaches,
+                            onClearAllCaches = onClearAllCaches?.let { clear -> { clear {} } },
                             onNavigate = { viewModel.currentScreen = it },
                         )
                         Screen.LARGE -> {
