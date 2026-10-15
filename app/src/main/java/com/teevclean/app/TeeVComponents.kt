@@ -35,15 +35,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
@@ -64,26 +64,23 @@ val Lime = Color(0xFFB7F35B)
 val Muted = Color(0xFF9BA79C)
 
 @Composable
-fun Sidebar(selected: Screen, onSelect: (Screen) -> Unit) {
-    val selectedFocus = remember { FocusRequester() }
+@OptIn(ExperimentalComposeUiApi::class)
+fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) -> Unit) {
     // Sub-screens without their own menu item land focus on the item they are reached from.
     val focusTarget = when (selected) {
         Screen.DUPLICATES -> Screen.CLEAN
         Screen.BREAKDOWN -> Screen.OVERVIEW
         else -> selected
     }
-    val focusInside = remember { mutableStateOf(false) }
     Column(
         Modifier
             .width(210.dp)
             .fillMaxHeight()
-            .onFocusChanged { state ->
-                val entering = state.hasFocus && !focusInside.value
-                focusInside.value = state.hasFocus
-                // D-pad Left from the content lands on the current screen's item rather than
-                // whichever item happens to be nearest.
-                if (entering) selectedFocus.tryRequestFocus()
-            }
+            // D-pad Left from the content lands on the current screen's item rather than
+            // whichever item happens to be nearest. Redirecting here, instead of calling
+            // requestFocus from onFocusChanged mid-move, keeps the move from being cancelled
+            // and focus snapping back into the content.
+            .focusProperties { enter = { selectedFocus } }
             .focusGroup()
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
