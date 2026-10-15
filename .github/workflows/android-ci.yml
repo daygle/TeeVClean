@@ -27,13 +27,13 @@ jobs:
       run: chmod +x gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --warning-mode all -Dorg.gradle.deprecation.trace=true
+      run: ./gradlew assembleDebug
 
     - name: Run Unit Tests
-      run: ./gradlew testDebugUnitTest --warning-mode all
+      run: ./gradlew testDebugUnitTest
 
     - name: Run Lint
-      run: ./gradlew lintDebug --warning-mode all
+      run: ./gradlew lintDebug
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
