@@ -207,6 +207,8 @@ fun TeeVCleanApp(
     val sidebarFocus = remember { FocusRequester() }
     // Whether D-pad focus was last in the content pane (rather than the sidebar).
     val focusWasInContent = remember { mutableStateOf(false) }
+    // Whether anything in the app (sidebar or content) currently has focus.
+    val appHasFocus = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // When the focused item disappears (a card that opened another screen, Back, a deleted
     // row), Compose drops focus and the next D-pad press would jump to the top-left menu item.
@@ -214,7 +216,10 @@ fun TeeVCleanApp(
     val restoreContentFocus = {
         scope.launch {
             withFrameNanos { }
-            contentFocus.tryRequestFocus()
+            // Moving from the content to the sidebar (D-pad Left, Back) briefly leaves neither
+            // with focus. Only restore if focus is still lost a frame later, or it would be
+            // pulled straight back out of the sidebar.
+            if (!appHasFocus.value && focusWasInContent.value) contentFocus.tryRequestFocus()
         }
     }
 
@@ -287,7 +292,10 @@ fun TeeVCleanApp(
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 48.dp, vertical = 27.dp)
-                    .onFocusChanged { if (!it.hasFocus && focusWasInContent.value) restoreContentFocus() }
+                    .onFocusChanged {
+                        appHasFocus.value = it.hasFocus
+                        if (!it.hasFocus && focusWasInContent.value) restoreContentFocus()
+                    }
             ) {
                 Box(Modifier.onFocusChanged { if (it.hasFocus) focusWasInContent.value = false }) {
                     Sidebar(viewModel.currentScreen, sidebarFocus) { viewModel.currentScreen = it }
