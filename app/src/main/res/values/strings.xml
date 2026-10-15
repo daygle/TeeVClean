@@ -175,6 +175,17 @@
     <string name="breakdown_needs_usage">Grant Usage Access (Applications) to attribute space to individual apps.</string>
 
     <string name="history_never">never</string>
+    <string name="history_title">Clean-up History</string>
+    <string name="history_card_desc">Every manual and automatic clean-up, with what it freed</string>
+    <string name="history_desc">Your last 50 clean-ups, newest first.</string>
+    <string name="history_empty">No clean-ups recorded yet. Totals from earlier clean-ups are still shown on Overview.</string>
+    <string name="history_manual">Manual</string>
+    <string name="history_automatic">Automatic</string>
+    <string name="history_clear">Clear History</string>
+    <plurals name="history_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
     <string name="history_last_run">Last run: %1$s</string>
     <plurals name="history_total_freed">
         <item quantity="one">Freed %1$s across %2$d item in total.</item>

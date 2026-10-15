@@ -377,6 +377,10 @@ fun TeeVCleanApp(
                             onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
                         )
                         Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
+                        Screen.HISTORY -> CleanupHistoryScreen(
+                            entries = viewModel.cleanupLog,
+                            onClear = { viewModel.clearCleanupLog() },
+                        )
                         Screen.BREAKDOWN -> StorageBreakdownScreen(
                             breakdown = viewModel.storageBreakdown,
                             isLoading = viewModel.isLoadingBreakdown,
@@ -419,6 +423,15 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                     "View",
                     Screen.BREAKDOWN.icon
                 ) { onNavigate(Screen.BREAKDOWN) }
+            }
+            item {
+                FeatureCard(
+                    stringResource(R.string.history_title),
+                    stringResource(R.string.history_card_desc),
+                    "Log",
+                    "View",
+                    Screen.HISTORY.icon
+                ) { onNavigate(Screen.HISTORY) }
             }
             item {
                 FeatureCard(
@@ -896,6 +909,45 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
             item { Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp) }
         }
     }
+}
+
+@Composable
+private fun CleanupHistoryScreen(entries: List<CleanupLogEntry>, onClear: () -> Unit) {
+    val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+    ScreenScaffold(stringResource(R.string.history_title), stringResource(R.string.history_desc)) {
+        ScreenList(spacing = 10.dp) {
+            if (entries.isEmpty()) {
+                item { Text(stringResource(R.string.history_empty), color = Muted, fontSize = 15.sp) }
+            }
+            items(entries) { entry ->
+                val source = stringResource(if (entry.automatic) R.string.history_automatic else R.string.history_manual)
+                val what = entry.kinds.map { stringResource(it.labelRes()) }.joinToString(", ")
+                val count = pluralStringResource(R.plurals.history_items, entry.itemsRemoved, entry.itemsRemoved)
+                ResultRow(
+                    title = dateFormat.format(entry.time),
+                    // Android's own cache clear doesn't report a count, so none is shown for it.
+                    subtitle = listOfNotNull(source, what, count.takeIf { CleanupKind.APP_CACHES !in entry.kinds }).joinToString("  ·  "),
+                    amount = formatBytes(entry.freedBytes),
+                    safe = true,
+                )
+            }
+            // Last, so landing on the list from the menu can't put focus on it.
+            if (entries.isNotEmpty()) {
+                item { TvTextButton(onClick = onClear) { Text(stringResource(R.string.history_clear)) } }
+            }
+        }
+    }
+}
+
+private fun CleanupKind.labelRes(): Int = when (this) {
+    CleanupKind.OWN_CACHE -> R.string.this_app_cache
+    CleanupKind.APP_CACHES -> R.string.all_app_caches
+    CleanupKind.SWEEP_FOLDERS -> R.string.schedule_clean_sweep
+    CleanupKind.SWEEP_DEVICE -> R.string.schedule_clean_device_sweep
+    CleanupKind.INSTALLERS -> R.string.schedule_clean_installed_apks
+    CleanupKind.TRASH -> R.string.schedule_clean_trash
+    CleanupKind.FILES -> R.string.large_files
+    CleanupKind.DUPLICATES -> R.string.duplicates
 }
 
 @Composable

@@ -14,18 +14,30 @@ class CleanupWorker(
         try {
             // Only unattended-safe actions run here - never user files or other apps' caches.
             val repository = TeeVRepository(applicationContext)
-            repository.clearOwnCache()
+            val kinds = mutableListOf(CleanupKind.OWN_CACHE)
+            val results = mutableListOf(repository.clearOwnCache())
             if (inputData.getBoolean(TeeVRepository.INCLUDE_SWEEP, false)) {
-                repository.sweepJunk()
+                kinds += CleanupKind.SWEEP_FOLDERS
+                results += repository.sweepJunk()
             }
             val sweepDevice = inputData.getBoolean(TeeVRepository.INCLUDE_DEVICE_SWEEP, false)
             val trash = inputData.getBoolean(TeeVRepository.INCLUDE_TRASH, false)
             if (sweepDevice || trash) {
-                repository.cleanDeviceStorage(sweep = sweepDevice, trash = trash)
+                if (sweepDevice) kinds += CleanupKind.SWEEP_DEVICE
+                if (trash) kinds += CleanupKind.TRASH
+                results += repository.cleanDeviceStorage(sweep = sweepDevice, trash = trash)
             }
             if (inputData.getBoolean(TeeVRepository.INCLUDE_INSTALLED_APKS, false)) {
-                repository.removeInstalledApks()
+                kinds += CleanupKind.INSTALLERS
+                results += repository.removeInstalledApks()
             }
+            // One history entry for the whole run, logged even when nothing was found, so the
+            // log shows the schedule is running.
+            repository.recordCleanup(
+                kinds,
+                CleanupResult(results.sumOf { it.freedBytes }, results.sumOf { it.itemsRemoved }),
+                automatic = true,
+            )
             Result.success()
         } catch (e: CancellationException) {
             throw e

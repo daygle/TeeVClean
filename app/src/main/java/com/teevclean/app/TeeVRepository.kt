@@ -108,6 +108,62 @@ data class StorageBreakdown(
 /** Running totals for the cleanup-history card. */
 data class CleanupHistory(val lastRun: Long, val totalFreedBytes: Long, val totalItems: Int)
 
+/** What a logged clean-up removed. Stored by name, so entries must not be renamed. */
+enum class CleanupKind {
+    OWN_CACHE,
+    APP_CACHES,
+    SWEEP_FOLDERS,
+    SWEEP_DEVICE,
+    INSTALLERS,
+    TRASH,
+    FILES,
+    DUPLICATES,
+}
+
+/** One clean-up in the history log. An automatic run is one entry covering every [kinds] it ran. */
+data class CleanupLogEntry(
+    val time: Long,
+    val automatic: Boolean,
+    val kinds: List<CleanupKind>,
+    val freedBytes: Long,
+    val itemsRemoved: Int,
+)
+
+/**
+ * Line-based storage format for the clean-up log, one entry per line:
+ * `time;auto;KIND,KIND;freedBytes;items`. Kept free of Android types so it can be unit-tested.
+ * Malformed lines and unknown kinds are skipped rather than failing the whole log.
+ */
+object CleanupLogCodec {
+    fun encode(entries: List<CleanupLogEntry>): String = entries.joinToString("\n") { entry ->
+        listOf(
+            entry.time,
+            if (entry.automatic) 1 else 0,
+            entry.kinds.joinToString(",") { it.name },
+            entry.freedBytes,
+            entry.itemsRemoved,
+        ).joinToString(";")
+    }
+
+    fun decode(text: String?): List<CleanupLogEntry> =
+        text.orEmpty().lines().mapNotNull { line ->
+            val parts = line.split(';')
+            if (parts.size != 5) return@mapNotNull null
+            val kinds = parts[2].split(',').mapNotNull { name -> CleanupKind.entries.firstOrNull { it.name == name } }
+            CleanupLogEntry(
+                time = parts[0].toLongOrNull() ?: return@mapNotNull null,
+                automatic = parts[1] == "1",
+                kinds = kinds,
+                freedBytes = parts[3].toLongOrNull() ?: return@mapNotNull null,
+                itemsRemoved = parts[4].toIntOrNull() ?: return@mapNotNull null,
+            )
+        }
+
+    /** Adds [entry] as the newest, keeping at most [limit] entries. */
+    fun prepend(entries: List<CleanupLogEntry>, entry: CleanupLogEntry, limit: Int): List<CleanupLogEntry> =
+        (listOf(entry) + entries).take(limit)
+}
+
 /** Which files the Files screen lists: anything large, old, or (optionally) a leftover installer. */
 data class FileFilter(
     val minSize: Long = 500L * 1024 * 1024,
@@ -309,11 +365,28 @@ class TeeVRepository(private val context: Context) {
         prefs.getInt(KEY_TOTAL_ITEMS, 0),
     )
 
-    private fun recordCleanup(result: CleanupResult) {
+    /** The clean-up log, newest first. */
+    fun getCleanupLog(): List<CleanupLogEntry> = CleanupLogCodec.decode(prefs.getString(KEY_CLEANUP_LOG, null))
+
+    /** Empties the log. The running totals are kept. */
+    fun clearCleanupLog() {
+        prefs.edit { remove(KEY_CLEANUP_LOG) }
+    }
+
+    /**
+     * Records one clean-up: adds it to the running totals and logs it. The cleanup functions
+     * don't record themselves, so a caller running several (the scheduled job) logs them as
+     * one entry.
+     */
+    @Synchronized
+    fun recordCleanup(kinds: List<CleanupKind>, result: CleanupResult, automatic: Boolean) {
+        val now = System.currentTimeMillis()
+        val entry = CleanupLogEntry(now, automatic, kinds, result.freedBytes, result.itemsRemoved)
         prefs.edit {
-            putLong(KEY_LAST_RUN, System.currentTimeMillis())
+            putLong(KEY_LAST_RUN, now)
             putLong(KEY_TOTAL_FREED, prefs.getLong(KEY_TOTAL_FREED, 0L) + result.freedBytes)
             putInt(KEY_TOTAL_ITEMS, prefs.getInt(KEY_TOTAL_ITEMS, 0) + result.itemsRemoved)
+            putString(KEY_CLEANUP_LOG, CleanupLogCodec.encode(CleanupLogCodec.prepend(getCleanupLog(), entry, MAX_LOG_ENTRIES)))
         }
     }
 
@@ -337,7 +410,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -544,7 +617,7 @@ class TeeVRepository(private val context: Context) {
                 removed++
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -676,7 +749,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -738,7 +811,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -752,12 +825,6 @@ class TeeVRepository(private val context: Context) {
 
     /** Free bytes on the data partition right now; used to measure what a system cleanup freed. */
     fun freeBytes(): Long = dataPartitionSpace().second
-
-    /**
-     * Adds a cleanup done by Android itself (e.g. the clear-all-caches prompt) to the history.
-     * The system doesn't report an item count, so only the bytes are added.
-     */
-    fun recordSystemCleanup(freedBytes: Long) = recordCleanup(CleanupResult(freedBytes, 0))
 
     /** Opens the system "free up space" storage manager so the user can act device-wide. */
     fun openStorageManager() {
@@ -907,6 +974,10 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_LAST_RUN = "cleanup_last_run"
         private const val KEY_TOTAL_FREED = "cleanup_total_freed"
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
+        private const val KEY_CLEANUP_LOG = "cleanup_log"
+
+        /** The log keeps only the most recent clean-ups. */
+        private const val MAX_LOG_ENTRIES = 50
         private const val KEY_MIN_FILE_SIZE = "min_file_size"
         private const val KEY_MIN_FILE_AGE = "min_file_age"
         private const val KEY_SHOW_INSTALLERS = "show_installers"

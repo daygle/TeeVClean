@@ -69,7 +69,7 @@ fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) 
     // Sub-screens without their own menu item land focus on the item they are reached from.
     val focusTarget = when (selected) {
         Screen.DUPLICATES -> Screen.CLEAN
-        Screen.BREAKDOWN -> Screen.OVERVIEW
+        Screen.BREAKDOWN, Screen.HISTORY -> Screen.OVERVIEW
         else -> selected
     }
     Column(
@@ -89,7 +89,7 @@ fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) 
         }
         Spacer(Modifier.height(32.dp))
         Screen.entries
-            .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN }
+            .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN && it != Screen.HISTORY }
             .forEach { screen -> NavItem(screen, selected, onSelect, selectedFocus.takeIf { screen == focusTarget }) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect, selectedFocus.takeIf { focusTarget == Screen.SETTINGS })
