@@ -108,6 +108,68 @@ data class StorageBreakdown(
 /** Running totals for the cleanup-history card. */
 data class CleanupHistory(val lastRun: Long, val totalFreedBytes: Long, val totalItems: Int)
 
+/** What a logged clean-up removed. Stored by name, so entries must not be renamed. */
+enum class CleanupKind {
+    OWN_CACHE,
+    APP_CACHES,
+    SWEEP_FOLDERS,
+    SWEEP_DEVICE,
+    INSTALLERS,
+    TRASH,
+    FILES,
+    DUPLICATES,
+}
+
+/**
+ * One clean-up in the history log. An automatic run is one entry covering every [kinds] it
+ * finished; [complete] is false when the run failed or was stopped part-way.
+ */
+data class CleanupLogEntry(
+    val time: Long,
+    val automatic: Boolean,
+    val kinds: List<CleanupKind>,
+    val freedBytes: Long,
+    val itemsRemoved: Int,
+    val complete: Boolean = true,
+)
+
+/**
+ * Line-based storage format for the clean-up log, one entry per line:
+ * `time;auto;KIND,KIND;freedBytes;items;complete` (a missing last field means complete). Kept free of Android types so it can be unit-tested.
+ * Malformed lines and unknown kinds are skipped rather than failing the whole log.
+ */
+object CleanupLogCodec {
+    fun encode(entries: List<CleanupLogEntry>): String = entries.joinToString("\n") { entry ->
+        listOf(
+            entry.time,
+            if (entry.automatic) 1 else 0,
+            entry.kinds.joinToString(",") { it.name },
+            entry.freedBytes,
+            entry.itemsRemoved,
+            if (entry.complete) 1 else 0,
+        ).joinToString(";")
+    }
+
+    fun decode(text: String?): List<CleanupLogEntry> =
+        text.orEmpty().lines().mapNotNull { line ->
+            val parts = line.split(';')
+            if (parts.size != 5 && parts.size != 6) return@mapNotNull null
+            val kinds = parts[2].split(',').mapNotNull { name -> CleanupKind.entries.firstOrNull { it.name == name } }
+            CleanupLogEntry(
+                time = parts[0].toLongOrNull() ?: return@mapNotNull null,
+                automatic = parts[1] == "1",
+                kinds = kinds,
+                freedBytes = parts[3].toLongOrNull() ?: return@mapNotNull null,
+                itemsRemoved = parts[4].toIntOrNull() ?: return@mapNotNull null,
+                complete = parts.getOrNull(5) != "0",
+            )
+        }
+
+    /** Adds [entry] as the newest, keeping at most [limit] entries. */
+    fun prepend(entries: List<CleanupLogEntry>, entry: CleanupLogEntry, limit: Int): List<CleanupLogEntry> =
+        (listOf(entry) + entries).take(limit)
+}
+
 /** Which files the Files screen lists: anything large, old, or (optionally) a leftover installer. */
 data class FileFilter(
     val minSize: Long = 500L * 1024 * 1024,
@@ -309,11 +371,28 @@ class TeeVRepository(private val context: Context) {
         prefs.getInt(KEY_TOTAL_ITEMS, 0),
     )
 
-    private fun recordCleanup(result: CleanupResult) {
+    /** The clean-up log, newest first. */
+    fun getCleanupLog(): List<CleanupLogEntry> = CleanupLogCodec.decode(prefs.getString(KEY_CLEANUP_LOG, null))
+
+    /** Empties the log. The running totals are kept. */
+    fun clearCleanupLog() {
+        prefs.edit { remove(KEY_CLEANUP_LOG) }
+    }
+
+    /**
+     * Records one clean-up: adds it to the running totals and logs it. The cleanup functions
+     * don't record themselves, so a caller running several (the scheduled job) logs them as
+     * one entry.
+     */
+    @Synchronized
+    fun recordCleanup(kinds: List<CleanupKind>, result: CleanupResult, automatic: Boolean, complete: Boolean = true) {
+        val now = System.currentTimeMillis()
+        val entry = CleanupLogEntry(now, automatic, kinds, result.freedBytes, result.itemsRemoved, complete)
         prefs.edit {
-            putLong(KEY_LAST_RUN, System.currentTimeMillis())
+            putLong(KEY_LAST_RUN, now)
             putLong(KEY_TOTAL_FREED, prefs.getLong(KEY_TOTAL_FREED, 0L) + result.freedBytes)
             putInt(KEY_TOTAL_ITEMS, prefs.getInt(KEY_TOTAL_ITEMS, 0) + result.itemsRemoved)
+            putString(KEY_CLEANUP_LOG, CleanupLogCodec.encode(CleanupLogCodec.prepend(getCleanupLog(), entry, MAX_LOG_ENTRIES)))
         }
     }
 
@@ -337,7 +416,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -442,6 +521,7 @@ class TeeVRepository(private val context: Context) {
      */
     private fun walkSafTree(treeUriString: String, completeDirs: MutableSet<String>? = null): List<SafEntry> {
         val treeUri = treeUriString.toUri()
+        if (treeUri.scheme == "file") return walkFileTree(treeUri, completeDirs)
         val rootId = try {
             DocumentsContract.getTreeDocumentId(treeUri)
         } catch (_: Exception) {
@@ -485,6 +565,58 @@ class TeeVRepository(private val context: Context) {
             if (listedAll) completeDirs?.add(dirId)
         }
         return entries
+    }
+
+    /**
+     * The same walk for a folder picked with TeeVClean's own folder browser, stored as a
+     * `file://` Uri (TVs without the system folder picker). Read directly through all-files
+     * access; entries use the absolute path as their id.
+     */
+    private fun walkFileTree(folderUri: Uri, completeDirs: MutableSet<String>?): List<SafEntry> {
+        val root = folderUri.path?.let { File(it) } ?: return emptyList()
+        val entries = mutableListOf<SafEntry>()
+        val queue = ArrayDeque<File>().apply { add(root) }
+        while (queue.isNotEmpty() && entries.size < MAX_SCAN_NODES) {
+            val dir = queue.removeFirst()
+            val children = dir.listFiles() ?: continue
+            var listedAll = true
+            for (child in children) {
+                if (entries.size >= MAX_SCAN_NODES) {
+                    listedAll = false
+                    break
+                }
+                val isDir = child.isDirectory
+                entries.add(
+                    SafEntry(
+                        uri = Uri.fromFile(child),
+                        documentId = child.path,
+                        parentId = dir.path,
+                        name = child.name,
+                        parentName = dir.name,
+                        mimeType = if (isDir) Document.MIME_TYPE_DIR else FILE_MIME_TYPE,
+                        size = if (isDir) 0L else child.length(),
+                        modified = child.lastModified(),
+                    ),
+                )
+                if (isDir) queue.add(child)
+            }
+            if (listedAll) completeDirs?.add(dir.path)
+        }
+        return entries
+    }
+
+    /**
+     * Deletes a walked entry. SAF deletes a folder with everything in it; for a `file://` entry
+     * [recursive] decides that, so removing a folder believed empty fails safely if it isn't.
+     */
+    private fun deleteEntry(entry: SafEntry, recursive: Boolean): Boolean {
+        if (entry.uri.scheme != "file") return deleteDocument(entry.uri)
+        return try {
+            val file = File(entry.documentId)
+            if (recursive) file.deleteRecursively() else file.delete()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun documentName(treeUri: Uri, documentId: String): String? = try {
@@ -544,7 +676,7 @@ class TeeVRepository(private val context: Context) {
                 removed++
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -652,7 +784,7 @@ class TeeVRepository(private val context: Context) {
             }
             for (entry in entries) {
                 if (!entry.isDirectory || !FileClassifier.isJunkFolder(entry.name) || insideDeleted(entry)) continue
-                if (deleteDocument(entry.uri)) {
+                if (deleteEntry(entry, recursive = true)) {
                     deletedDirs += entry.documentId
                     freed += subtreeBytes[entry.documentId] ?: 0L
                     removed++
@@ -665,9 +797,9 @@ class TeeVRepository(private val context: Context) {
                 if (entry.documentId in deletedDirs || insideDeleted(entry)) continue
                 val deleted = when {
                     entry.isFile && FileClassifier.isSweepableFile(entry.name, entry.modified, now) ->
-                        deleteDocument(entry.uri).also { if (it) freed += entry.size }
+                        deleteEntry(entry, recursive = false).also { if (it) freed += entry.size }
                     entry.isDirectory && entry.documentId in completeDirs && (remaining[entry.documentId] ?: 0) == 0 ->
-                        deleteDocument(entry.uri)
+                        deleteEntry(entry, recursive = false)
                     else -> false
                 }
                 if (deleted) {
@@ -676,7 +808,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -738,7 +870,7 @@ class TeeVRepository(private val context: Context) {
                 }
             }
         }
-        CleanupResult(freed, removed).also { recordCleanup(it) }
+        CleanupResult(freed, removed)
     }
 
     /**
@@ -752,12 +884,6 @@ class TeeVRepository(private val context: Context) {
 
     /** Free bytes on the data partition right now; used to measure what a system cleanup freed. */
     fun freeBytes(): Long = dataPartitionSpace().second
-
-    /**
-     * Adds a cleanup done by Android itself (e.g. the clear-all-caches prompt) to the history.
-     * The system doesn't report an item count, so only the bytes are added.
-     */
-    fun recordSystemCleanup(freedBytes: Long) = recordCleanup(CleanupResult(freedBytes, 0))
 
     /** Opens the system "free up space" storage manager so the user can act device-wide. */
     fun openStorageManager() {
@@ -895,6 +1021,9 @@ class TeeVRepository(private val context: Context) {
         const val INCLUDE_TRASH = "include_trash"
         private const val MAX_SCAN_NODES = 5000
 
+        /** Any non-folder type; walked files only need to be told apart from folders. */
+        private const val FILE_MIME_TYPE = "application/octet-stream"
+
         /** Upper bound on entries the device-wide clean visits, so a huge drive can't run forever. */
         private const val MAX_DEVICE_NODES = 100_000
         private const val LAST_USED_WINDOW_DAYS = 180L
@@ -907,6 +1036,10 @@ class TeeVRepository(private val context: Context) {
         private const val KEY_LAST_RUN = "cleanup_last_run"
         private const val KEY_TOTAL_FREED = "cleanup_total_freed"
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
+        private const val KEY_CLEANUP_LOG = "cleanup_log"
+
+        /** The log keeps only the most recent clean-ups. */
+        private const val MAX_LOG_ENTRIES = 50
         private const val KEY_MIN_FILE_SIZE = "min_file_size"
         private const val KEY_MIN_FILE_AGE = "min_file_age"
         private const val KEY_SHOW_INSTALLERS = "show_installers"

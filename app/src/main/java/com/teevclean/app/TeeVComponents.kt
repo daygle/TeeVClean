@@ -69,7 +69,7 @@ fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) 
     // Sub-screens without their own menu item land focus on the item they are reached from.
     val focusTarget = when (selected) {
         Screen.DUPLICATES -> Screen.CLEAN
-        Screen.BREAKDOWN -> Screen.OVERVIEW
+        Screen.BREAKDOWN, Screen.HISTORY -> Screen.OVERVIEW
         else -> selected
     }
     Column(
@@ -89,7 +89,7 @@ fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) 
         }
         Spacer(Modifier.height(32.dp))
         Screen.entries
-            .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN }
+            .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN && it != Screen.HISTORY }
             .forEach { screen -> NavItem(screen, selected, onSelect, selectedFocus.takeIf { screen == focusTarget }) }
         Spacer(Modifier.weight(1f))
         NavItem(Screen.SETTINGS, selected, onSelect, selectedFocus.takeIf { focusTarget == Screen.SETTINGS })
@@ -198,6 +198,9 @@ fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Un
         Text("›", color = Muted, fontSize = 26.sp)
     }
 }
+
+/** The primary shared-storage root, /storage/emulated/<user>, with or without a trailing slash. */
+private val INTERNAL_STORAGE_ROOT = Regex("^/storage/emulated/\\d+/?")
 
 @Composable
 fun SelectableChip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
@@ -546,8 +549,18 @@ fun ColumnScope.ScreenList(spacing: Dp = 12.dp, content: LazyListScope.() -> Uni
 /**
  * Readable name for a granted tree Uri, e.g. `content://…/tree/primary%3AMovies%2FTV` -> `Movies/TV`.
  * The tree id is percent-encoded, so it is decoded before taking the path after the volume prefix.
+ * Folders picked with TeeVClean's own browser are `file://` Uris and show their path relative to
+ * internal storage.
  */
 internal fun folderDisplayName(treeUri: String): String {
+    if (treeUri.startsWith("file://")) {
+        val path = try {
+            URLDecoder.decode(treeUri.removePrefix("file://"), "UTF-8")
+        } catch (_: IllegalArgumentException) {
+            treeUri.removePrefix("file://")
+        }
+        return path.replace(INTERNAL_STORAGE_ROOT, "").trimEnd('/').ifEmpty { "Internal storage" }
+    }
     val encodedId = treeUri.substringAfter("/tree/", "").substringBefore('/').substringBefore('?')
     // Uri.encode escapes '+', so URLDecoder's '+'-as-space rule never changes a real tree id.
     val treeId = try {

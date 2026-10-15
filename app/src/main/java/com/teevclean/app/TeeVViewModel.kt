@@ -89,6 +89,15 @@ enum class Screen(val labelRes: Int, val icon: ImageVector) {
                 "-4.24,-8.52,-8.97,-8.99zm0,11.01V22c4.74,-0.47,8.5,-4.25,8.97,-8.99h-8.97z",
         ),
     ),
+    HISTORY(
+        R.string.history_title,
+        menuIcon(
+            "history",
+            "M13,3c-4.97,0,-9,4.03,-9,9H1l3.89,3.89,0.07,0.14L9,12H6c0,-3.87,3.13,-7,7,-7s7,3.13,7,7," +
+                "-3.13,7,-7,7c-1.93,0,-3.68,-0.79,-4.94,-2.06l-1.42,1.42C8.27,19.99,10.51,21,13,21c4.97," +
+                "0,9,-4.03,9,-9s-4.03,-9,-9,-9zm-1,5v5l4.28,2.54,0.72,-1.21,-3.5,-2.08V8H12z",
+        ),
+    ),
     DUPLICATES(
         R.string.duplicates,
         menuIcon(
@@ -148,6 +157,8 @@ class TeeVViewModel(
         private set
     var cleanupHistory by mutableStateOf(repository.getCleanupHistory())
         private set
+    var cleanupLog by mutableStateOf(repository.getCleanupLog())
+        private set
     var storageBreakdown by mutableStateOf<StorageBreakdown?>(null)
         private set
     var isLoadingBreakdown by mutableStateOf(false)
@@ -176,6 +187,7 @@ class TeeVViewModel(
                 largeFiles = filesDeferred.await()
                 cacheSize = cacheDeferred.await()
                 cleanupHistory = repository.getCleanupHistory()
+                cleanupLog = repository.getCleanupLog()
                 cleanupFrequency = repository.getCleanupFrequency()
                 scheduleOptions = repository.getScheduleOptions()
                 customFolders = repository.getCustomFolders()
@@ -198,6 +210,9 @@ class TeeVViewModel(
         }
     }
 
+    /** Shows TeeVClean's own folder browser, used where the TV has no system folder picker. */
+    var folderBrowserOpen by mutableStateOf(false)
+
     fun addCustomFolder(uri: String) {
         repository.addCustomFolder(uri)
         invalidateDuplicates()
@@ -213,6 +228,7 @@ class TeeVViewModel(
     fun clearCache(onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.clearOwnCache()
+            record(CleanupKind.OWN_CACHE, result)
             refreshData()
             onComplete(result)
         }
@@ -221,6 +237,7 @@ class TeeVViewModel(
     fun deleteFiles(files: List<FileSummary>, onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.deleteFiles(files)
+            record(CleanupKind.FILES, result)
             invalidateDuplicates()
             refreshData()
             onComplete(result)
@@ -242,11 +259,22 @@ class TeeVViewModel(
     fun deleteDuplicates(files: List<FileSummary>, onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.deleteFiles(files)
+            record(CleanupKind.DUPLICATES, result)
             invalidateDuplicates()
             findDuplicates()
             refreshData()
             onComplete(result)
         }
+    }
+
+    /** Logs a clean-up the user started. Preferences write in memory and persist asynchronously. */
+    private fun record(kind: CleanupKind, result: CleanupResult) {
+        repository.recordCleanup(listOf(kind), result, automatic = false)
+    }
+
+    fun clearCleanupLog() {
+        repository.clearCleanupLog()
+        cleanupLog = emptyList()
     }
 
     /**
@@ -262,6 +290,7 @@ class TeeVViewModel(
     fun sweepJunk(onComplete: (CleanupResult) -> Unit) {
         viewModelScope.launch {
             val result = repository.sweepJunk()
+            record(CleanupKind.SWEEP_FOLDERS, result)
             invalidateDuplicates()
             refreshData()
             onComplete(result)
@@ -276,7 +305,10 @@ class TeeVViewModel(
     fun onSystemCachesCleared(freeBefore: Long, onComplete: (Long) -> Unit) {
         viewModelScope.launch {
             val freed = withContext(Dispatchers.IO) {
-                (repository.freeBytes() - freeBefore).coerceAtLeast(0L).also { repository.recordSystemCleanup(it) }
+                // Android doesn't report an item count, so only the bytes are recorded.
+                (repository.freeBytes() - freeBefore).coerceAtLeast(0L).also {
+                    repository.recordCleanup(listOf(CleanupKind.APP_CACHES), CleanupResult(it, 0), automatic = false)
+                }
             }
             refreshData()
             onComplete(freed)

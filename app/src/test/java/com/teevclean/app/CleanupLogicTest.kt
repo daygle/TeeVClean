@@ -95,6 +95,9 @@ class CleanupLogicTest {
         assertEquals("Download", folderDisplayName("content://com.android.externalstorage.documents/tree/primary%3ADownload"))
         assertEquals("1234-ABCD", folderDisplayName("content://com.android.externalstorage.documents/tree/1234-ABCD%3A"))
         assertEquals("not-a-tree", folderDisplayName("not-a-tree"))
+        assertEquals("Movies/TV Shows", folderDisplayName("file:///storage/emulated/0/Movies/TV%20Shows"))
+        assertEquals("Internal storage", folderDisplayName("file:///storage/emulated/0"))
+        assertEquals("/storage/1234-ABCD/Films", folderDisplayName("file:///storage/1234-ABCD/Films"))
     }
 
     @Test
@@ -151,6 +154,32 @@ class CleanupLogicTest {
         assertEquals(0, ScheduleOptions().extrasCount)
         assertEquals(2, ScheduleOptions(sweepDevice = true, trash = true).extrasCount)
         assertEquals(4, ScheduleOptions(sweepFolders = true, sweepDevice = true, installedApks = true, trash = true).extrasCount)
+    }
+
+    @Test
+    fun `cleanup log survives an encode and decode round trip`() {
+        val entries = listOf(
+            CleanupLogEntry(2000L, true, listOf(CleanupKind.OWN_CACHE, CleanupKind.SWEEP_DEVICE, CleanupKind.TRASH), 5_000_000L, 12),
+            CleanupLogEntry(1000L, false, listOf(CleanupKind.APP_CACHES), 0L, 0),
+            CleanupLogEntry(500L, true, emptyList(), 0L, 0, complete = false),
+        )
+        assertEquals(entries, CleanupLogCodec.decode(CleanupLogCodec.encode(entries)))
+        assertEquals(emptyList<CleanupLogEntry>(), CleanupLogCodec.decode(null))
+        assertEquals(emptyList<CleanupLogEntry>(), CleanupLogCodec.decode(""))
+    }
+
+    @Test
+    fun `cleanup log skips malformed lines and unknown kinds`() {
+        val decoded = CleanupLogCodec.decode("garbage\n10;1;OWN_CACHE,FUTURE_KIND;50;1\nx;0;TRASH;1;1")
+        assertEquals(listOf(CleanupLogEntry(10L, true, listOf(CleanupKind.OWN_CACHE), 50L, 1)), decoded)
+        assertFalse("explicit incomplete flag", CleanupLogCodec.decode("10;1;OWN_CACHE;50;1;0").single().complete)
+    }
+
+    @Test
+    fun `cleanup log keeps the newest entries up to the limit`() {
+        fun entry(time: Long) = CleanupLogEntry(time, false, listOf(CleanupKind.FILES), 1L, 1)
+        val log = (1L..3L).fold(emptyList<CleanupLogEntry>()) { acc, t -> CleanupLogCodec.prepend(acc, entry(t), limit = 2) }
+        assertEquals(listOf(entry(3L), entry(2L)), log)
     }
 
     @Test

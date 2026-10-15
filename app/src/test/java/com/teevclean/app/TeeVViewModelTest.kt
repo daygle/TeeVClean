@@ -34,6 +34,7 @@ class TeeVViewModelTest {
         every { repository.getCleanupFrequency() } returns CleanupFrequency.WEEKLY
         every { repository.getScheduleOptions() } returns ScheduleOptions(sweepFolders = true, installedApks = true)
         every { repository.getCleanupHistory() } returns CleanupHistory(1L, 10L, 1)
+        every { repository.getCleanupLog() } returns emptyList()
         every { repository.getFileFilter() } returns FileFilter()
         coEvery { repository.readStorage() } returns StorageSummary(used = 40, total = 100)
         coEvery { repository.loadApps() } returns listOf(app)
@@ -87,6 +88,32 @@ class TeeVViewModelTest {
 
         assertEquals(CleanupResult(4096, 1), reported)
         assertTrue(vm.duplicateGroups.isEmpty())
+    }
+
+    @Test
+    fun `manual clean-ups are logged with their kind`() {
+        coEvery { repository.clearOwnCache() } returns CleanupResult(100, 2)
+        coEvery { repository.deleteFiles(any()) } returns CleanupResult(4096, 1)
+        val vm = viewModel()
+
+        vm.clearCache {}
+        vm.deleteDuplicates(listOf(file)) {}
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        verify { repository.recordCleanup(listOf(CleanupKind.OWN_CACHE), CleanupResult(100, 2), automatic = false) }
+        verify { repository.recordCleanup(listOf(CleanupKind.DUPLICATES), CleanupResult(4096, 1), automatic = false) }
+    }
+
+    @Test
+    fun `clearing the log empties it`() {
+        every { repository.getCleanupLog() } returns listOf(CleanupLogEntry(1L, true, listOf(CleanupKind.TRASH), 10L, 1))
+        val vm = viewModel()
+        assertEquals(1, vm.cleanupLog.size)
+
+        vm.clearCleanupLog()
+
+        verify { repository.clearCleanupLog() }
+        assertTrue(vm.cleanupLog.isEmpty())
     }
 
     @Test

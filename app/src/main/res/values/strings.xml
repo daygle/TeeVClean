@@ -71,12 +71,10 @@
 
     <string name="confirm_cleanup">Confirm Clean-up</string>
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
-    <string name="schedule_clean_own_cache">TeeVClean cache - always included</string>
-    <string name="schedule_clean_sweep">Temporary/log files in custom folders</string>
-    <string name="schedule_clean_device_sweep">Temporary/log files across device storage</string>
-    <string name="schedule_clean_installed_apks">Installers (APKs) for apps already installed</string>
-    <string name="schedule_clean_trash">Deleted media waiting in Android\'s trash</string>
-    <string name="schedule_needs_storage_access">Allow all files access in Settings to enable the device-wide options.</string>
+    <string name="schedule_clean_sweep">Junk Files (Custom Folders)</string>
+    <string name="schedule_clean_device_sweep">Junk Files (All Storage)</string>
+    <string name="schedule_clean_installed_apks">Installers (Already Installed)</string>
+    <string name="schedule_clean_trash">Trash</string>
     <string name="remove_cache">Remove Cache</string>
 
     <string name="last_used_unavailable">Last used unavailable</string>
@@ -86,7 +84,7 @@
     <string name="scanning">Scanning…</string>
     <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
 
-    <string name="settings_cleanup_schedule">Weekly Clean-up Schedule</string>
+    <string name="settings_cleanup_schedule">Automatic Clean-up</string>
     <string name="settings_permissions">Application Permission</string>
     <string name="settings_usage_access">Usage Access</string>
     <string name="settings_usage_access_granted">Granted</string>
@@ -112,17 +110,14 @@
     <string name="delete">Delete</string>
     <string name="confirm_sweep_desc">Remove temp, log and thumbnail files, macOS/Windows/Linux drive metadata and trash folders (._ files, desktop.ini, .Trashes, .Trash-*), torrent pieces untouched for 7 days, plus empty folders, from the folders you added. Your media and documents are left untouched.</string>
     <string name="schedule_title">Automatic Clean-up</string>
-    <string name="schedule_desc">Runs in the background without asking you. Only clean-ups that are safe without your confirmation can be scheduled.</string>
     <string name="schedule_frequency_label">How often</string>
+    <string name="schedule_also_clean">Also clean</string>
+    <string name="schedule_unavailable_hint">Greyed-out options need a custom folder or all files access - see Settings.</string>
+    <string name="schedule_footer">TeeVClean\'s own cache is always cleared. Other apps\' caches and your own files are never touched automatically.</string>
     <string name="freq_off">Off</string>
     <string name="freq_daily">Daily</string>
     <string name="freq_weekly">Weekly</string>
     <string name="freq_monthly">Monthly</string>
-    <string name="schedule_items_label">What to clean</string>
-    <string name="schedule_not_included_label">Not included</string>
-    <string name="schedule_excluded_app_caches">Other apps\' caches - Android asks you to confirm every time, so clear them from Clean-up.</string>
-    <string name="schedule_excluded_files">Files and Duplicates - deleting your files always needs your review.</string>
-    <string name="schedule_sweep_needs_folder">Add a custom folder in Settings to enable this.</string>
     <plurals name="schedule_with_extras">
         <item quantity="one">%1$s · plus %2$d extra clean-up</item>
         <item quantity="other">%1$s · plus %2$d extra clean-ups</item>
@@ -133,6 +128,11 @@
     <string name="cleanup_complete">Clean-up Complete</string>
     <string name="cleanup_nothing">Everything was already clean - nothing to remove.</string>
     <string name="done">Done</string>
+    <string name="folder_picker_needs_access">This TV has no system folder picker. Allow all files access for TeeVClean, then choose Add Folder again to pick one here.</string>
+    <string name="folder_browser_title">Choose a Folder</string>
+    <string name="folder_browser_up">Up one level</string>
+    <string name="folder_browser_use">Use This Folder</string>
+    <string name="folder_browser_empty">No folders inside this one.</string>
     <string name="feature_not_supported">System file picker missing. Opening settings to allow a full drive scan instead.</string>
     <string name="usage_settings_unavailable">This device doesn\'t offer a Usage Access settings screen.</string>
     <string name="storage_full_access_granted">Full storage access already enabled.</string>
@@ -180,6 +180,18 @@
     <string name="breakdown_needs_usage">Grant Usage Access (Applications) to attribute space to individual apps.</string>
 
     <string name="history_never">never</string>
+    <string name="history_title">Clean-up History</string>
+    <string name="history_card_desc">Every manual and automatic clean-up, with what it freed</string>
+    <string name="history_desc">Your last 50 clean-ups, newest first.</string>
+    <string name="history_empty">No clean-ups recorded yet. Totals from earlier clean-ups are still shown on Overview.</string>
+    <string name="history_manual">Manual</string>
+    <string name="history_automatic">Automatic</string>
+    <string name="history_incomplete">Stopped early</string>
+    <string name="history_clear">Clear History</string>
+    <plurals name="history_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
     <string name="history_last_run">Last run: %1$s</string>
     <plurals name="history_total_freed">
         <item quantity="one">Freed %1$s across %2$d item in total.</item>

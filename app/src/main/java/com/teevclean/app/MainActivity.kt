@@ -10,6 +10,11 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.net.Uri
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.key
+import java.io.File
 import android.os.Process
 import android.os.SystemClock
 import android.os.storage.StorageManager
@@ -61,9 +66,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -139,7 +147,13 @@ class MainActivity : ComponentActivity() {
         try {
             folderPicker.launch(null)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
+            // Many Android TVs ship without the system folder picker. With all-files access
+            // TeeVClean can browse shared storage itself; without it, ask for that access first.
+            if (viewModel.hasFullStorageAccess()) {
+                viewModel.folderBrowserOpen = true
+                return
+            }
+            Toast.makeText(this, R.string.folder_picker_needs_access, Toast.LENGTH_LONG).show()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 openAllFilesAccessSettings()
             } else {
@@ -189,6 +203,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 fun TeeVCleanApp(
     viewModel: TeeVViewModel,
     onRequestStorageAccess: () -> Unit,
@@ -220,6 +235,13 @@ fun TeeVCleanApp(
             // with focus. Only restore if focus is still lost a frame later, or it would be
             // pulled straight back out of the sidebar.
             if (!appHasFocus.value && focusWasInContent.value) contentFocus.tryRequestFocus()
+        }
+    }
+
+    val restoreFocusToContentTop = {
+        scope.launch {
+            withFrameNanos { }
+            contentFocus.tryRequestFocus()
         }
     }
 
@@ -272,6 +294,15 @@ fun TeeVCleanApp(
     cleanupResult?.let { result ->
         CleanupResultDialog(result) { cleanupResult = null }
     }
+    if (viewModel.folderBrowserOpen) {
+        FolderBrowserDialog(
+            onDismiss = { viewModel.folderBrowserOpen = false },
+            onPick = { folder ->
+                viewModel.folderBrowserOpen = false
+                viewModel.addCustomFolder(Uri.fromFile(folder).toString())
+            },
+        )
+    }
     if (showSchedule) {
         ScheduleDialog(
             current = viewModel.cleanupFrequency,
@@ -307,6 +338,20 @@ fun TeeVCleanApp(
                         .weight(1f)
                         .onFocusChanged { if (it.hasFocus) focusWasInContent.value = true }
                         .focusRequester(contentFocus)
+                        // D-pad Right from the sidebar would land on whatever item is level with
+                        // the focused menu entry (e.g. "System Uptime" from "Device Health").
+                        // Cancel that move and request the content instead, which enters it at
+                        // its first item.
+                        .focusProperties {
+                            enter = { direction ->
+                                if (direction == FocusDirection.Right) {
+                                    restoreFocusToContentTop()
+                                    FocusRequester.Cancel
+                                } else {
+                                    FocusRequester.Default
+                                }
+                            }
+                        }
                         .focusGroup()
                 ) {
                     when (viewModel.currentScreen) {
@@ -352,6 +397,10 @@ fun TeeVCleanApp(
                             onDeleteExtras = { extras -> viewModel.deleteDuplicates(extras) { result -> cleanupResult = result } },
                         )
                         Screen.HEALTH -> HealthScreen(context, viewModel.storageSummary)
+                        Screen.HISTORY -> CleanupHistoryScreen(
+                            entries = viewModel.cleanupLog,
+                            onClear = { viewModel.clearCleanupLog() },
+                        )
                         Screen.BREAKDOWN -> StorageBreakdownScreen(
                             breakdown = viewModel.storageBreakdown,
                             isLoading = viewModel.isLoadingBreakdown,
@@ -394,6 +443,15 @@ private fun Dashboard(storage: StorageSummary, apps: List<AppSummary>, files: Li
                     "View",
                     Screen.BREAKDOWN.icon
                 ) { onNavigate(Screen.BREAKDOWN) }
+            }
+            item {
+                FeatureCard(
+                    stringResource(R.string.history_title),
+                    stringResource(R.string.history_card_desc),
+                    "Log",
+                    "View",
+                    Screen.HISTORY.icon
+                ) { onNavigate(Screen.HISTORY) }
             }
             item {
                 FeatureCard(
@@ -874,6 +932,50 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
 }
 
 @Composable
+private fun CleanupHistoryScreen(entries: List<CleanupLogEntry>, onClear: () -> Unit) {
+    val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+    ScreenScaffold(stringResource(R.string.history_title), stringResource(R.string.history_desc)) {
+        ScreenList(spacing = 10.dp) {
+            if (entries.isEmpty()) {
+                item { Text(stringResource(R.string.history_empty), color = Muted, fontSize = 15.sp) }
+            }
+            items(entries) { entry ->
+                val source = stringResource(if (entry.automatic) R.string.history_automatic else R.string.history_manual)
+                val what = entry.kinds.map { stringResource(it.labelRes()) }.joinToString(", ")
+                val count = pluralStringResource(R.plurals.history_items, entry.itemsRemoved, entry.itemsRemoved)
+                ResultRow(
+                    title = dateFormat.format(entry.time),
+                    // Android's own cache clear doesn't report a count, so none is shown for it.
+                    subtitle = listOfNotNull(
+                        source,
+                        stringResource(R.string.history_incomplete).takeIf { !entry.complete },
+                        what.ifEmpty { null },
+                        count.takeIf { CleanupKind.APP_CACHES !in entry.kinds },
+                    ).joinToString("  ·  "),
+                    amount = formatBytes(entry.freedBytes),
+                    safe = true,
+                )
+            }
+            // Last, so landing on the list from the menu can't put focus on it.
+            if (entries.isNotEmpty()) {
+                item { TvTextButton(onClick = onClear) { Text(stringResource(R.string.history_clear)) } }
+            }
+        }
+    }
+}
+
+private fun CleanupKind.labelRes(): Int = when (this) {
+    CleanupKind.OWN_CACHE -> R.string.this_app_cache
+    CleanupKind.APP_CACHES -> R.string.all_app_caches
+    CleanupKind.SWEEP_FOLDERS -> R.string.schedule_clean_sweep
+    CleanupKind.SWEEP_DEVICE -> R.string.schedule_clean_device_sweep
+    CleanupKind.INSTALLERS -> R.string.schedule_clean_installed_apks
+    CleanupKind.TRASH -> R.string.schedule_clean_trash
+    CleanupKind.FILES -> R.string.large_files
+    CleanupKind.DUPLICATES -> R.string.duplicates
+}
+
+@Composable
 private fun scheduleStatusText(frequency: CleanupFrequency, options: ScheduleOptions): String {
     val base = when (frequency) {
         CleanupFrequency.OFF -> stringResource(R.string.freq_off)
@@ -916,8 +1018,6 @@ private fun ScheduleDialog(
         title = { Text(stringResource(R.string.schedule_title), color = Muted) },
         text = {
             Column(Modifier.verticalScroll(scrollState)) {
-                Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 15.sp)
-                Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -926,49 +1026,34 @@ private fun ScheduleDialog(
                     SelectableChip(stringResource(R.string.freq_weekly), frequency == CleanupFrequency.WEEKLY) { frequency = CleanupFrequency.WEEKLY }
                     SelectableChip(stringResource(R.string.freq_monthly), frequency == CleanupFrequency.MONTHLY) { frequency = CleanupFrequency.MONTHLY }
                 }
-                Spacer(Modifier.height(18.dp))
-                Text(stringResource(R.string.schedule_items_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.schedule_clean_own_cache), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SelectableChip(
-                        stringResource(R.string.schedule_clean_sweep),
-                        selected = selected.sweepFolders && hasFolders,
-                        enabled = hasFolders,
-                    ) { selected = selected.copy(sweepFolders = !selected.sweepFolders) }
-                    SelectableChip(
-                        stringResource(R.string.schedule_clean_device_sweep),
-                        selected = selected.sweepDevice && hasStorageAccess,
-                        enabled = hasStorageAccess,
-                    ) { selected = selected.copy(sweepDevice = !selected.sweepDevice) }
-                    SelectableChip(
-                        stringResource(R.string.schedule_clean_installed_apks),
-                        selected = selected.installedApks && installersAvailable,
-                        enabled = installersAvailable,
-                    ) { selected = selected.copy(installedApks = !selected.installedApks) }
-                    if (trashSupported) {
-                        SelectableChip(
-                            stringResource(R.string.schedule_clean_trash),
-                            selected = selected.trash && hasStorageAccess,
-                            enabled = hasStorageAccess,
-                        ) { selected = selected.copy(trash = !selected.trash) }
+                // The extras only matter when something is scheduled; hiding them keeps "Off" simple.
+                if (frequency != CleanupFrequency.OFF) {
+                    Spacer(Modifier.height(20.dp))
+                    Text(stringResource(R.string.schedule_also_clean), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, hasFolders) {
+                            selected = selected.copy(sweepFolders = !selected.sweepFolders)
+                        }
+                        ScheduleToggle(stringResource(R.string.schedule_clean_device_sweep), selected.sweepDevice, hasStorageAccess) {
+                            selected = selected.copy(sweepDevice = !selected.sweepDevice)
+                        }
+                        ScheduleToggle(stringResource(R.string.schedule_clean_installed_apks), selected.installedApks, installersAvailable) {
+                            selected = selected.copy(installedApks = !selected.installedApks)
+                        }
+                        if (trashSupported) {
+                            ScheduleToggle(stringResource(R.string.schedule_clean_trash), selected.trash, hasStorageAccess) {
+                                selected = selected.copy(trash = !selected.trash)
+                            }
+                        }
+                    }
+                    if (!hasFolders || !hasStorageAccess) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(stringResource(R.string.schedule_unavailable_hint), color = Muted, fontSize = 13.sp)
                     }
                 }
-                if (!hasFolders) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 14.sp)
-                }
-                if (!hasStorageAccess) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.schedule_needs_storage_access), color = Muted, fontSize = 14.sp)
-                }
-                Spacer(Modifier.height(18.dp))
-                Text(stringResource(R.string.schedule_not_included_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.schedule_excluded_app_caches), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.schedule_excluded_files), color = Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(20.dp))
+                Text(stringResource(R.string.schedule_footer), color = Muted, fontSize = 13.sp)
             }
         },
         confirmButton = {
@@ -990,6 +1075,82 @@ private fun ScheduleDialog(
         },
         dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/**
+ * Folder picker over shared storage for TVs without the system one; needs all-files access.
+ * Hidden folders and Android/ (other apps' private data) are left out. Focus moves to the first
+ * row whenever the folder changes, since the focused row disappears with the old listing.
+ */
+@Composable
+private fun FolderBrowserDialog(onDismiss: () -> Unit, onPick: (File) -> Unit) {
+    val root = remember { Environment.getExternalStorageDirectory() }
+    var current by remember { mutableStateOf(root) }
+    val folders = remember(current) {
+        current.listFiles().orEmpty()
+            .filter { it.isDirectory && !it.name.startsWith(".") && !(current == root && it.name.equals("Android", ignoreCase = true)) }
+            .sortedBy { it.name.lowercase() }
+    }
+    val canGoUp = current != root
+    val firstFocus = key(current) { rememberInitialFocus() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.folder_browser_title)) },
+        text = {
+            Column {
+                Text(folderDisplayName(Uri.fromFile(current).toString()), color = Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(10.dp))
+                LazyColumn(Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (canGoUp) {
+                        item(key = "up") {
+                            FolderRow("‹  " + stringResource(R.string.folder_browser_up), Modifier.focusRequester(firstFocus)) {
+                                current = current.parentFile ?: root
+                            }
+                        }
+                    }
+                    items(folders, key = { it.path }) { folder ->
+                        val modifier = if (!canGoUp && folder == folders.first()) Modifier.focusRequester(firstFocus) else Modifier
+                        FolderRow(folder.name, modifier) { current = folder }
+                    }
+                    if (folders.isEmpty()) {
+                        item(key = "empty") { Text(stringResource(R.string.folder_browser_empty), color = Muted, fontSize = 14.sp) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            // With nothing to list at the top level, start on the button instead.
+            val modifier = if (!canGoUp && folders.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier
+            TvButton(modifier = modifier, onClick = { onPick(current) }) { Text(stringResource(R.string.folder_browser_use)) }
+        },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun FolderRow(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    Text(
+        label,
+        color = if (focused) Ink else Color.White,
+        fontSize = 16.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (focused) Lime else PanelLight)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
+}
+
+/** An on/off option in the schedule dialog; a tick marks it as on, since chip colour alone is easy to miss. */
+@Composable
+private fun ScheduleToggle(label: String, on: Boolean, available: Boolean, onFlip: () -> Unit) {
+    val active = on && available
+    SelectableChip(if (active) "✓  $label" else label, selected = active, enabled = available, onClick = onFlip)
 }
 
 @Composable
