@@ -95,6 +95,9 @@ class CleanupLogicTest {
         assertEquals("Download", folderDisplayName("content://com.android.externalstorage.documents/tree/primary%3ADownload"))
         assertEquals("1234-ABCD", folderDisplayName("content://com.android.externalstorage.documents/tree/1234-ABCD%3A"))
         assertEquals("not-a-tree", folderDisplayName("not-a-tree"))
+        assertEquals("Movies/TV Shows", folderDisplayName("file:///storage/emulated/0/Movies/TV%20Shows"))
+        assertEquals("Internal storage", folderDisplayName("file:///storage/emulated/0"))
+        assertEquals("/storage/1234-ABCD/Films", folderDisplayName("file:///storage/1234-ABCD/Films"))
     }
 
     @Test

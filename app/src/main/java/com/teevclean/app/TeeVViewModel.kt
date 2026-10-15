@@ -210,6 +210,9 @@ class TeeVViewModel(
         }
     }
 
+    /** Shows TeeVClean's own folder browser, used where the TV has no system folder picker. */
+    var folderBrowserOpen by mutableStateOf(false)
+
     fun addCustomFolder(uri: String) {
         repository.addCustomFolder(uri)
         invalidateDuplicates()

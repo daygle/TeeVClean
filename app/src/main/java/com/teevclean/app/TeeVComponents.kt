@@ -199,6 +199,9 @@ fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Un
     }
 }
 
+/** The primary shared-storage root, /storage/emulated/<user>, with or without a trailing slash. */
+private val INTERNAL_STORAGE_ROOT = Regex("^/storage/emulated/\\d+/?")
+
 @Composable
 fun SelectableChip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -546,8 +549,18 @@ fun ColumnScope.ScreenList(spacing: Dp = 12.dp, content: LazyListScope.() -> Uni
 /**
  * Readable name for a granted tree Uri, e.g. `content://…/tree/primary%3AMovies%2FTV` -> `Movies/TV`.
  * The tree id is percent-encoded, so it is decoded before taking the path after the volume prefix.
+ * Folders picked with TeeVClean's own browser are `file://` Uris and show their path relative to
+ * internal storage.
  */
 internal fun folderDisplayName(treeUri: String): String {
+    if (treeUri.startsWith("file://")) {
+        val path = try {
+            URLDecoder.decode(treeUri.removePrefix("file://"), "UTF-8")
+        } catch (_: IllegalArgumentException) {
+            treeUri.removePrefix("file://")
+        }
+        return path.replace(INTERNAL_STORAGE_ROOT, "").trimEnd('/').ifEmpty { "Internal storage" }
+    }
     val encodedId = treeUri.substringAfter("/tree/", "").substringBefore('/').substringBefore('?')
     // Uri.encode escapes '+', so URLDecoder's '+'-as-space rule never changes a real tree id.
     val treeId = try {

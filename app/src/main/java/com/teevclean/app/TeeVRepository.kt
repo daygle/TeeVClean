@@ -521,6 +521,7 @@ class TeeVRepository(private val context: Context) {
      */
     private fun walkSafTree(treeUriString: String, completeDirs: MutableSet<String>? = null): List<SafEntry> {
         val treeUri = treeUriString.toUri()
+        if (treeUri.scheme == "file") return walkFileTree(treeUri, completeDirs)
         val rootId = try {
             DocumentsContract.getTreeDocumentId(treeUri)
         } catch (_: Exception) {
@@ -564,6 +565,58 @@ class TeeVRepository(private val context: Context) {
             if (listedAll) completeDirs?.add(dirId)
         }
         return entries
+    }
+
+    /**
+     * The same walk for a folder picked with TeeVClean's own folder browser, stored as a
+     * `file://` Uri (TVs without the system folder picker). Read directly through all-files
+     * access; entries use the absolute path as their id.
+     */
+    private fun walkFileTree(folderUri: Uri, completeDirs: MutableSet<String>?): List<SafEntry> {
+        val root = folderUri.path?.let { File(it) } ?: return emptyList()
+        val entries = mutableListOf<SafEntry>()
+        val queue = ArrayDeque<File>().apply { add(root) }
+        while (queue.isNotEmpty() && entries.size < MAX_SCAN_NODES) {
+            val dir = queue.removeFirst()
+            val children = dir.listFiles() ?: continue
+            var listedAll = true
+            for (child in children) {
+                if (entries.size >= MAX_SCAN_NODES) {
+                    listedAll = false
+                    break
+                }
+                val isDir = child.isDirectory
+                entries.add(
+                    SafEntry(
+                        uri = Uri.fromFile(child),
+                        documentId = child.path,
+                        parentId = dir.path,
+                        name = child.name,
+                        parentName = dir.name,
+                        mimeType = if (isDir) Document.MIME_TYPE_DIR else FILE_MIME_TYPE,
+                        size = if (isDir) 0L else child.length(),
+                        modified = child.lastModified(),
+                    ),
+                )
+                if (isDir) queue.add(child)
+            }
+            if (listedAll) completeDirs?.add(dir.path)
+        }
+        return entries
+    }
+
+    /**
+     * Deletes a walked entry. SAF deletes a folder with everything in it; for a `file://` entry
+     * [recursive] decides that, so removing a folder believed empty fails safely if it isn't.
+     */
+    private fun deleteEntry(entry: SafEntry, recursive: Boolean): Boolean {
+        if (entry.uri.scheme != "file") return deleteDocument(entry.uri)
+        return try {
+            val file = File(entry.documentId)
+            if (recursive) file.deleteRecursively() else file.delete()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun documentName(treeUri: Uri, documentId: String): String? = try {
@@ -731,7 +784,7 @@ class TeeVRepository(private val context: Context) {
             }
             for (entry in entries) {
                 if (!entry.isDirectory || !FileClassifier.isJunkFolder(entry.name) || insideDeleted(entry)) continue
-                if (deleteDocument(entry.uri)) {
+                if (deleteEntry(entry, recursive = true)) {
                     deletedDirs += entry.documentId
                     freed += subtreeBytes[entry.documentId] ?: 0L
                     removed++
@@ -744,9 +797,9 @@ class TeeVRepository(private val context: Context) {
                 if (entry.documentId in deletedDirs || insideDeleted(entry)) continue
                 val deleted = when {
                     entry.isFile && FileClassifier.isSweepableFile(entry.name, entry.modified, now) ->
-                        deleteDocument(entry.uri).also { if (it) freed += entry.size }
+                        deleteEntry(entry, recursive = false).also { if (it) freed += entry.size }
                     entry.isDirectory && entry.documentId in completeDirs && (remaining[entry.documentId] ?: 0) == 0 ->
-                        deleteDocument(entry.uri)
+                        deleteEntry(entry, recursive = false)
                     else -> false
                 }
                 if (deleted) {
@@ -967,6 +1020,9 @@ class TeeVRepository(private val context: Context) {
         const val INCLUDE_INSTALLED_APKS = "include_installed_apks"
         const val INCLUDE_TRASH = "include_trash"
         private const val MAX_SCAN_NODES = 5000
+
+        /** Any non-folder type; walked files only need to be told apart from folders. */
+        private const val FILE_MIME_TYPE = "application/octet-stream"
 
         /** Upper bound on entries the device-wide clean visits, so a huge drive can't run forever. */
         private const val MAX_DEVICE_NODES = 100_000

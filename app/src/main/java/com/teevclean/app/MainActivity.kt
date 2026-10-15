@@ -10,6 +10,11 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.net.Uri
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.key
+import java.io.File
 import android.os.Process
 import android.os.SystemClock
 import android.os.storage.StorageManager
@@ -142,7 +147,13 @@ class MainActivity : ComponentActivity() {
         try {
             folderPicker.launch(null)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
+            // Many Android TVs ship without the system folder picker. With all-files access
+            // TeeVClean can browse shared storage itself; without it, ask for that access first.
+            if (viewModel.hasFullStorageAccess()) {
+                viewModel.folderBrowserOpen = true
+                return
+            }
+            Toast.makeText(this, R.string.folder_picker_needs_access, Toast.LENGTH_LONG).show()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 openAllFilesAccessSettings()
             } else {
@@ -282,6 +293,15 @@ fun TeeVCleanApp(
     }
     cleanupResult?.let { result ->
         CleanupResultDialog(result) { cleanupResult = null }
+    }
+    if (viewModel.folderBrowserOpen) {
+        FolderBrowserDialog(
+            onDismiss = { viewModel.folderBrowserOpen = false },
+            onPick = { folder ->
+                viewModel.folderBrowserOpen = false
+                viewModel.addCustomFolder(Uri.fromFile(folder).toString())
+            },
+        )
     }
     if (showSchedule) {
         ScheduleDialog(
@@ -1054,6 +1074,75 @@ private fun ScheduleDialog(
             ) { Text(stringResource(R.string.save)) }
         },
         dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/**
+ * Folder picker over shared storage for TVs without the system one; needs all-files access.
+ * Hidden folders and Android/ (other apps' private data) are left out. Focus moves to the first
+ * row whenever the folder changes, since the focused row disappears with the old listing.
+ */
+@Composable
+private fun FolderBrowserDialog(onDismiss: () -> Unit, onPick: (File) -> Unit) {
+    val root = remember { Environment.getExternalStorageDirectory() }
+    var current by remember { mutableStateOf(root) }
+    val folders = remember(current) {
+        current.listFiles().orEmpty()
+            .filter { it.isDirectory && !it.name.startsWith(".") && !(current == root && it.name.equals("Android", ignoreCase = true)) }
+            .sortedBy { it.name.lowercase() }
+    }
+    val canGoUp = current != root
+    val firstFocus = key(current) { rememberInitialFocus() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.folder_browser_title)) },
+        text = {
+            Column {
+                Text(folderDisplayName(Uri.fromFile(current).toString()), color = Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(10.dp))
+                LazyColumn(Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (canGoUp) {
+                        item(key = "up") {
+                            FolderRow("‹  " + stringResource(R.string.folder_browser_up), Modifier.focusRequester(firstFocus)) {
+                                current = current.parentFile ?: root
+                            }
+                        }
+                    }
+                    items(folders, key = { it.path }) { folder ->
+                        val modifier = if (!canGoUp && folder == folders.first()) Modifier.focusRequester(firstFocus) else Modifier
+                        FolderRow(folder.name, modifier) { current = folder }
+                    }
+                    if (folders.isEmpty()) {
+                        item(key = "empty") { Text(stringResource(R.string.folder_browser_empty), color = Muted, fontSize = 14.sp) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            // With nothing to list at the top level, start on the button instead.
+            val modifier = if (!canGoUp && folders.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier
+            TvButton(modifier = modifier, onClick = { onPick(current) }) { Text(stringResource(R.string.folder_browser_use)) }
+        },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun FolderRow(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    Text(
+        label,
+        color = if (focused) Ink else Color.White,
+        fontSize = 16.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (focused) Lime else PanelLight)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     )
 }
 

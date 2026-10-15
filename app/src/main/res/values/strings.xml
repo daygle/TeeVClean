@@ -128,6 +128,11 @@
     <string name="cleanup_complete">Clean-up Complete</string>
     <string name="cleanup_nothing">Everything was already clean - nothing to remove.</string>
     <string name="done">Done</string>
+    <string name="folder_picker_needs_access">This TV has no system folder picker. Allow all files access for TeeVClean, then choose Add Folder again to pick one here.</string>
+    <string name="folder_browser_title">Choose a Folder</string>
+    <string name="folder_browser_up">Up one level</string>
+    <string name="folder_browser_use">Use This Folder</string>
+    <string name="folder_browser_empty">No folders inside this one.</string>
     <string name="feature_not_supported">System file picker missing. Opening settings to allow a full drive scan instead.</string>
     <string name="usage_settings_unavailable">This device doesn\'t offer a Usage Access settings screen.</string>
     <string name="storage_full_access_granted">Full storage access already enabled.</string>
