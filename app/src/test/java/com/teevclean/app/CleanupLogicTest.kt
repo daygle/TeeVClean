@@ -131,6 +131,29 @@ class CleanupLogicTest {
     }
 
     @Test
+    fun `trashed media is matched by android's trash prefix only`() {
+        assertTrue(FileClassifier.isTrashed(".trashed-1735689600-IMG_0001.jpg"))
+        assertTrue(FileClassifier.isTrashed(".TRASHED-1735689600-clip.mp4"))
+        listOf("trashed-1-a.jpg", ".trash-1000", "IMG_0001.jpg", null).forEach { assertFalse("$it", FileClassifier.isTrashed(it)) }
+    }
+
+    @Test
+    fun `files only count as settled after a day untouched`() {
+        val hour = 60L * 60 * 1000
+        val now = 1000 * hour
+        assertTrue(FileClassifier.hasSettled(now - 25 * hour, now))
+        assertFalse("still being written", FileClassifier.hasSettled(now - 1 * hour, now))
+        assertFalse("unknown date is never settled", FileClassifier.hasSettled(0, now))
+    }
+
+    @Test
+    fun `schedule options count the opted-in extras`() {
+        assertEquals(0, ScheduleOptions().extrasCount)
+        assertEquals(2, ScheduleOptions(sweepDevice = true, trash = true).extrasCount)
+        assertEquals(4, ScheduleOptions(sweepFolders = true, sweepDevice = true, installedApks = true, trash = true).extrasCount)
+    }
+
+    @Test
     fun `installer is redundant only when installed at same or newer version`() {
         assertTrue(FileClassifier.isInstallerRedundant(archiveVersion = 10, installedVersion = 10))
         assertTrue(FileClassifier.isInstallerRedundant(archiveVersion = 10, installedVersion = 12))

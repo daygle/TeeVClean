@@ -275,11 +275,12 @@ fun TeeVCleanApp(
     if (showSchedule) {
         ScheduleDialog(
             current = viewModel.cleanupFrequency,
-            sweepEnabled = viewModel.scheduleSweepEnabled,
+            options = viewModel.scheduleOptions,
             hasFolders = viewModel.customFolders.isNotEmpty(),
+            hasStorageAccess = viewModel.hasFullStorageAccess(),
             onDismiss = { showSchedule = false },
-            onSave = { frequency, includeSweep ->
-                viewModel.setSchedule(frequency, includeSweep)
+            onSave = { frequency, options ->
+                viewModel.setSchedule(frequency, options)
                 showSchedule = false
             },
         )
@@ -357,7 +358,7 @@ fun TeeVCleanApp(
                             onLoad = { viewModel.loadBreakdown() },
                         )
                         Screen.SETTINGS -> SettingsScreen(
-                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleSweepEnabled),
+                            scheduleSummary = scheduleStatusText(viewModel.cleanupFrequency, viewModel.scheduleOptions),
                             customFolders = viewModel.customFolders,
                             hasUsageAccess = hasUsageStatsPermission(context),
                             hasStorageAccess = hasStorageAccessPermission(context, viewModel),
@@ -873,15 +874,16 @@ private fun HealthScreen(context: Context, storage: StorageSummary) {
 }
 
 @Composable
-private fun scheduleStatusText(frequency: CleanupFrequency, sweepEnabled: Boolean): String {
+private fun scheduleStatusText(frequency: CleanupFrequency, options: ScheduleOptions): String {
     val base = when (frequency) {
         CleanupFrequency.OFF -> stringResource(R.string.freq_off)
         CleanupFrequency.DAILY -> stringResource(R.string.freq_daily)
         CleanupFrequency.WEEKLY -> stringResource(R.string.freq_weekly)
         CleanupFrequency.MONTHLY -> stringResource(R.string.freq_monthly)
     }
-    return if (frequency != CleanupFrequency.OFF && sweepEnabled) {
-        stringResource(R.string.schedule_with_sweep, base)
+    val extras = options.extrasCount
+    return if (frequency != CleanupFrequency.OFF && extras > 0) {
+        pluralStringResource(R.plurals.schedule_with_extras, extras, base, extras)
     } else {
         base
     }
@@ -890,18 +892,30 @@ private fun scheduleStatusText(frequency: CleanupFrequency, sweepEnabled: Boolea
 @Composable
 private fun ScheduleDialog(
     current: CleanupFrequency,
-    sweepEnabled: Boolean,
+    options: ScheduleOptions,
     hasFolders: Boolean,
+    hasStorageAccess: Boolean,
     onDismiss: () -> Unit,
-    onSave: (CleanupFrequency, Boolean) -> Unit,
+    onSave: (CleanupFrequency, ScheduleOptions) -> Unit,
 ) {
     var frequency by remember { mutableStateOf(current) }
-    var sweep by remember { mutableStateOf(sweepEnabled) }
+    var selected by remember { mutableStateOf(options) }
+    // Android's trash only exists from Android 11.
+    val trashSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    val installersAvailable = hasStorageAccess || hasFolders
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    // The explanation at the bottom has nothing focusable, so D-pad focus alone never scrolls
+    // to it; reaching Save brings it into view. (Not Cancel: it takes focus on open, and the
+    // dialog should open at the top.)
+    val revealBottom = Modifier.onFocusChanged {
+        if (it.isFocused) scope.launch { scrollState.animateScrollTo(scrollState.maxValue) }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.schedule_title), color = Muted) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScroll(scrollState)) {
                 Text(stringResource(R.string.schedule_desc), color = Muted, fontSize = 15.sp)
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -917,14 +931,37 @@ private fun ScheduleDialog(
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.schedule_clean_own_cache), color = Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(10.dp))
-                SelectableChip(
-                    stringResource(R.string.schedule_clean_sweep),
-                    selected = sweep && hasFolders,
-                    enabled = hasFolders,
-                ) { sweep = !sweep }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SelectableChip(
+                        stringResource(R.string.schedule_clean_sweep),
+                        selected = selected.sweepFolders && hasFolders,
+                        enabled = hasFolders,
+                    ) { selected = selected.copy(sweepFolders = !selected.sweepFolders) }
+                    SelectableChip(
+                        stringResource(R.string.schedule_clean_device_sweep),
+                        selected = selected.sweepDevice && hasStorageAccess,
+                        enabled = hasStorageAccess,
+                    ) { selected = selected.copy(sweepDevice = !selected.sweepDevice) }
+                    SelectableChip(
+                        stringResource(R.string.schedule_clean_installed_apks),
+                        selected = selected.installedApks && installersAvailable,
+                        enabled = installersAvailable,
+                    ) { selected = selected.copy(installedApks = !selected.installedApks) }
+                    if (trashSupported) {
+                        SelectableChip(
+                            stringResource(R.string.schedule_clean_trash),
+                            selected = selected.trash && hasStorageAccess,
+                            enabled = hasStorageAccess,
+                        ) { selected = selected.copy(trash = !selected.trash) }
+                    }
+                }
                 if (!hasFolders) {
                     Spacer(Modifier.height(8.dp))
                     Text(stringResource(R.string.schedule_sweep_needs_folder), color = Muted, fontSize = 14.sp)
+                }
+                if (!hasStorageAccess) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.schedule_needs_storage_access), color = Muted, fontSize = 14.sp)
                 }
                 Spacer(Modifier.height(18.dp))
                 Text(stringResource(R.string.schedule_not_included_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -934,7 +971,23 @@ private fun ScheduleDialog(
                 Text(stringResource(R.string.schedule_excluded_files), color = Muted, fontSize = 14.sp)
             }
         },
-        confirmButton = { TvButton(onClick = { onSave(frequency, sweep && hasFolders) }) { Text(stringResource(R.string.save)) } },
+        confirmButton = {
+            TvButton(
+                modifier = revealBottom,
+                onClick = {
+                    // Options that can't run (missing folder or access) are saved as off.
+                    onSave(
+                        frequency,
+                        ScheduleOptions(
+                            sweepFolders = selected.sweepFolders && hasFolders,
+                            sweepDevice = selected.sweepDevice && hasStorageAccess,
+                            installedApks = selected.installedApks && installersAvailable,
+                            trash = selected.trash && hasStorageAccess && trashSupported,
+                        ),
+                    )
+                },
+            ) { Text(stringResource(R.string.save)) }
+        },
         dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

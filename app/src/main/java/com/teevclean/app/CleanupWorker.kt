@@ -18,6 +18,14 @@ class CleanupWorker(
             if (inputData.getBoolean(TeeVRepository.INCLUDE_SWEEP, false)) {
                 repository.sweepJunk()
             }
+            val sweepDevice = inputData.getBoolean(TeeVRepository.INCLUDE_DEVICE_SWEEP, false)
+            val trash = inputData.getBoolean(TeeVRepository.INCLUDE_TRASH, false)
+            if (sweepDevice || trash) {
+                repository.cleanDeviceStorage(sweep = sweepDevice, trash = trash)
+            }
+            if (inputData.getBoolean(TeeVRepository.INCLUDE_INSTALLED_APKS, false)) {
+                repository.removeInstalledApks()
+            }
             Result.success()
         } catch (e: CancellationException) {
             throw e

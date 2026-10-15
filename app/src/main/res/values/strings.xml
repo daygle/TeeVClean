@@ -73,6 +73,10 @@
     <string name="confirm_cleanup_desc">Only TeeVClean\'s own temporary cache will be removed. Photos, downloads, app data, and other apps remain untouched. Estimated space: %1$s.</string>
     <string name="schedule_clean_own_cache">TeeVClean cache - always included</string>
     <string name="schedule_clean_sweep">Temporary/log files in custom folders</string>
+    <string name="schedule_clean_device_sweep">Temporary/log files across device storage</string>
+    <string name="schedule_clean_installed_apks">Installers (APKs) for apps already installed</string>
+    <string name="schedule_clean_trash">Deleted media waiting in Android\'s trash</string>
+    <string name="schedule_needs_storage_access">Allow all files access in Settings to enable the device-wide options.</string>
     <string name="remove_cache">Remove Cache</string>
 
     <string name="last_used_unavailable">Last used unavailable</string>
@@ -119,7 +123,10 @@
     <string name="schedule_excluded_app_caches">Other apps\' caches - Android asks you to confirm every time, so clear them from Clean-up.</string>
     <string name="schedule_excluded_files">Files and Duplicates - deleting your files always needs your review.</string>
     <string name="schedule_sweep_needs_folder">Add a custom folder in Settings to enable this.</string>
-    <string name="schedule_with_sweep">%1$s · incl. temp sweep</string>
+    <plurals name="schedule_with_extras">
+        <item quantity="one">%1$s · plus %2$d extra clean-up</item>
+        <item quantity="other">%1$s · plus %2$d extra clean-ups</item>
+    </plurals>
     <string name="schedule_change">Change</string>
     <string name="save">Save</string>
 

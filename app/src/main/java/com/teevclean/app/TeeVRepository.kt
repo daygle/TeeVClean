@@ -79,6 +79,20 @@ enum class CleanupFrequency(val intervalDays: Long?) {
     MONTHLY(30),
 }
 
+/** What the background cleanup does besides clearing TeeVClean's own cache, which it always does. */
+data class ScheduleOptions(
+    /** Temp/log sweep of the folders added in Settings. */
+    val sweepFolders: Boolean = false,
+    /** The same sweep across all shared device storage (needs all-files access). */
+    val sweepDevice: Boolean = false,
+    /** Installers for apps already installed at the same or a newer version. */
+    val installedApks: Boolean = false,
+    /** Media waiting in Android's trash (Android 11+, needs all-files access). */
+    val trash: Boolean = false,
+) {
+    val extrasCount: Int get() = listOf(sweepFolders, sweepDevice, installedApks, trash).count { it }
+}
+
 /** A device-storage breakdown. [systemAndOtherBytes] is what used space isn't attributed to user apps. */
 data class StorageBreakdown(
     val totalBytes: Long,
@@ -158,6 +172,20 @@ object FileClassifier {
     fun isSweepableFile(name: String?, modified: Long, now: Long): Boolean =
         isJunk(name) || isForeignMetadata(name) || isStaleIncompleteDownload(name, modified, now)
 
+    /**
+     * Media in Android's trash (Android 11+), stored as `.trashed-<expiry>-<name>` until Android
+     * purges it after 30 days.
+     */
+    fun isTrashed(name: String?): Boolean = name?.lowercase()?.startsWith(".trashed-") == true
+
+    /**
+     * Untouched for at least [SETTLED_HOURS]. The device-wide sweep only removes settled files,
+     * so a download or log still being written by another app is left alone. An unknown date
+     * (0) never counts as settled.
+     */
+    fun hasSettled(modified: Long, now: Long): Boolean =
+        modified > 0 && modified < now - TimeUnit.HOURS.toMillis(SETTLED_HOURS)
+
     /** Leftover app installers, worth reviewing for removal once the app is installed. */
     fun isInstaller(name: String?): Boolean {
         val lower = name?.lowercase() ?: return false
@@ -173,6 +201,7 @@ object FileClassifier {
         installedVersion != null && installedVersion >= archiveVersion
 
     const val STALE_INCOMPLETE_DAYS = 7L
+    const val SETTLED_HOURS = 24L
 }
 
 class TeeVRepository(private val context: Context) {
@@ -311,11 +340,12 @@ class TeeVRepository(private val context: Context) {
         CleanupResult(freed, removed).also { recordCleanup(it) }
     }
 
-    suspend fun scanLargeFiles(): List<FileSummary> = withContext(Dispatchers.IO) {
-        val filter = getFileFilter()
-        val now = System.currentTimeMillis()
-
-        // Public storage roots read directly (works where the app has legacy/all-files access).
+    /**
+     * Files directly inside the public storage roots, read directly (works where the app has
+     * legacy or all-files access), plus every file in the folders granted through the Storage
+     * Access Framework.
+     */
+    private fun scannableFiles(): List<FileSummary> {
         val publicRoots = buildList {
             add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
             add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
@@ -333,8 +363,14 @@ class TeeVRepository(private val context: Context) {
         // Folders the user granted through the Storage Access Framework; entries here are deletable.
         val safFiles = grantedSafFiles().map { it.toSummary() }
 
-        (publicFiles + safFiles)
-            .distinctBy { it.uri }
+        return (publicFiles + safFiles).distinctBy { it.uri }
+    }
+
+    suspend fun scanLargeFiles(): List<FileSummary> = withContext(Dispatchers.IO) {
+        val filter = getFileFilter()
+        val now = System.currentTimeMillis()
+
+        scannableFiles()
             .mapNotNull { file ->
                 // APKs are checked against installed apps even when the filter wouldn't list them,
                 // so a redundant installer always shows up under "Already installed".
@@ -643,6 +679,77 @@ class TeeVRepository(private val context: Context) {
         CleanupResult(freed, removed).also { recordCleanup(it) }
     }
 
+    /**
+     * Walks shared device storage directly (needs all-files access) and removes the sweep's junk
+     * ([sweep]) and media waiting in Android's trash ([trash]). `Android/` (other apps' private
+     * folders) is skipped, junk files touched in the last day are left alone so a running
+     * download survives, and no folder is removed for being empty: apps expect their folders on
+     * shared storage.
+     */
+    suspend fun cleanDeviceStorage(sweep: Boolean, trash: Boolean): CleanupResult = withContext(Dispatchers.IO) {
+        if (!hasFullStorageAccess() || (!sweep && !trash)) return@withContext CleanupResult(0, 0)
+        val root = Environment.getExternalStorageDirectory()
+        val rootPath = try {
+            root.canonicalPath
+        } catch (_: Exception) {
+            return@withContext CleanupResult(0, 0)
+        }
+        val now = System.currentTimeMillis()
+        var freed = 0L
+        var removed = 0
+        var visited = 0
+        val seenDirs = mutableSetOf<String>()
+        val stack = ArrayDeque<File>().apply { add(root) }
+        while (stack.isNotEmpty() && visited < MAX_DEVICE_NODES) {
+            val dir = stack.removeLast()
+            // Canonical paths keep symlinks from looping or leading outside shared storage.
+            val dirPath = try {
+                dir.canonicalPath
+            } catch (_: Exception) {
+                continue
+            }
+            val insideRoot = dirPath == rootPath || dirPath.startsWith("$rootPath/")
+            if (!insideRoot || !seenDirs.add(dirPath)) continue
+            for (entry in dir.listFiles().orEmpty()) {
+                if (++visited >= MAX_DEVICE_NODES) break
+                if (entry.isDirectory) {
+                    when {
+                        dir == root && entry.name.equals("Android", ignoreCase = true) -> Unit
+                        sweep && FileClassifier.isJunkFolder(entry.name) -> {
+                            val size = folderSize(entry)
+                            if (entry.deleteRecursively()) {
+                                freed += size
+                                removed++
+                            }
+                        }
+                        else -> stack.add(entry)
+                    }
+                } else {
+                    val modified = entry.lastModified()
+                    val remove = (trash && FileClassifier.isTrashed(entry.name)) ||
+                        (sweep && FileClassifier.isSweepableFile(entry.name, modified, now) && FileClassifier.hasSettled(modified, now))
+                    if (remove) {
+                        val size = entry.length()
+                        if (entry.delete()) {
+                            freed += size
+                            removed++
+                        }
+                    }
+                }
+            }
+        }
+        CleanupResult(freed, removed).also { recordCleanup(it) }
+    }
+
+    /**
+     * Deletes APK installers whose app is already installed at the same or a newer version,
+     * from the same places the Files screen scans.
+     */
+    suspend fun removeInstalledApks(): CleanupResult = withContext(Dispatchers.IO) {
+        val redundant = scannableFiles().filter { FileClassifier.isApk(it.name) && isInstalledApk(it.uri) }
+        deleteFiles(redundant)
+    }
+
     /** Free bytes on the data partition right now; used to measure what a system cleanup freed. */
     fun freeBytes(): Long = dataPartitionSpace().second
 
@@ -700,18 +807,26 @@ class TeeVRepository(private val context: Context) {
             CleanupFrequency.valueOf(prefs.getString(KEY_FREQUENCY, null) ?: CleanupFrequency.OFF.name)
         }.getOrDefault(CleanupFrequency.OFF)
 
-    fun isScheduledSweepEnabled(): Boolean = prefs.getBoolean(KEY_INCLUDE_SWEEP, false)
+    fun getScheduleOptions(): ScheduleOptions = ScheduleOptions(
+        sweepFolders = prefs.getBoolean(KEY_INCLUDE_SWEEP, false),
+        sweepDevice = prefs.getBoolean(KEY_INCLUDE_DEVICE_SWEEP, false),
+        installedApks = prefs.getBoolean(KEY_INCLUDE_INSTALLED_APKS, false),
+        trash = prefs.getBoolean(KEY_INCLUDE_TRASH, false),
+    )
 
     /**
      * Configures the recurring background cleanup. Only unattended-safe actions are ever
-     * scheduled: the app's own cache always, and - when [includeSweep] is set - the temp/log
-     * sweep of folders the user granted. Other apps' caches and user-file deletion are never
-     * automated because they need explicit interaction.
+     * scheduled: the app's own cache always, plus the opted-in [options] - junk and trash that
+     * nothing needs, and installers for apps that are already installed. Other apps' caches and
+     * the user's own files are never automated because they need explicit interaction.
      */
-    fun setCleanupSchedule(frequency: CleanupFrequency, includeSweep: Boolean) {
+    fun setCleanupSchedule(frequency: CleanupFrequency, options: ScheduleOptions) {
         prefs.edit {
             putString(KEY_FREQUENCY, frequency.name)
-            putBoolean(KEY_INCLUDE_SWEEP, includeSweep)
+            putBoolean(KEY_INCLUDE_SWEEP, options.sweepFolders)
+            putBoolean(KEY_INCLUDE_DEVICE_SWEEP, options.sweepDevice)
+            putBoolean(KEY_INCLUDE_INSTALLED_APKS, options.installedApks)
+            putBoolean(KEY_INCLUDE_TRASH, options.trash)
         }
         val manager = WorkManager.getInstance(context)
         val intervalDays = frequency.intervalDays
@@ -719,7 +834,14 @@ class TeeVRepository(private val context: Context) {
             manager.cancelUniqueWork(CLEANUP_WORK)
         } else {
             val request = PeriodicWorkRequestBuilder<CleanupWorker>(intervalDays, TimeUnit.DAYS)
-                .setInputData(workDataOf(INCLUDE_SWEEP to includeSweep))
+                .setInputData(
+                    workDataOf(
+                        INCLUDE_SWEEP to options.sweepFolders,
+                        INCLUDE_DEVICE_SWEEP to options.sweepDevice,
+                        INCLUDE_INSTALLED_APKS to options.installedApks,
+                        INCLUDE_TRASH to options.trash,
+                    ),
+                )
                 .build()
             manager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
@@ -768,11 +890,20 @@ class TeeVRepository(private val context: Context) {
         /** Unique WorkManager name; the value predates daily/monthly schedules and must stay stable. */
         const val CLEANUP_WORK = "weekly-cache-cleanup"
         const val INCLUDE_SWEEP = "include_sweep"
+        const val INCLUDE_DEVICE_SWEEP = "include_device_sweep"
+        const val INCLUDE_INSTALLED_APKS = "include_installed_apks"
+        const val INCLUDE_TRASH = "include_trash"
         private const val MAX_SCAN_NODES = 5000
+
+        /** Upper bound on entries the device-wide clean visits, so a huge drive can't run forever. */
+        private const val MAX_DEVICE_NODES = 100_000
         private const val LAST_USED_WINDOW_DAYS = 180L
         private const val KEY_CUSTOM_FOLDERS = "custom_folders"
         private const val KEY_FREQUENCY = "cleanup_frequency"
         private const val KEY_INCLUDE_SWEEP = "cleanup_include_sweep"
+        private const val KEY_INCLUDE_DEVICE_SWEEP = "cleanup_include_device_sweep"
+        private const val KEY_INCLUDE_INSTALLED_APKS = "cleanup_include_installed_apks"
+        private const val KEY_INCLUDE_TRASH = "cleanup_include_trash"
         private const val KEY_LAST_RUN = "cleanup_last_run"
         private const val KEY_TOTAL_FREED = "cleanup_total_freed"
         private const val KEY_TOTAL_ITEMS = "cleanup_total_items"
