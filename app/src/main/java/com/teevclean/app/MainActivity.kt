@@ -159,15 +159,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun pickFolder() {
+        // With all-files access TeeVClean browses shared storage itself. Many Android TVs ship
+        // the system folder picker only as a stub that says "You don't have an app that can do
+        // this" instead of failing, so it isn't tried first.
+        if (viewModel.hasFullStorageAccess()) {
+            viewModel.folderBrowserOpen = true
+            return
+        }
         try {
             folderPicker.launch(null)
         } catch (_: ActivityNotFoundException) {
-            // Many Android TVs ship without the system folder picker. With all-files access
-            // TeeVClean can browse shared storage itself; without it, ask for that access first.
-            if (viewModel.hasFullStorageAccess()) {
-                viewModel.folderBrowserOpen = true
-                return
-            }
+            // No picker at all: ask for all-files access so the built-in browser can be used.
             Toast.makeText(this, R.string.folder_picker_needs_access, Toast.LENGTH_LONG).show()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 openAllFilesAccessSettings()
@@ -1159,7 +1161,9 @@ private fun ReviewCleanupDialog(
         mutableStateOf(
             ScheduleOptions(
                 appCaches = hasAppCaches,
-                sweepFolders = true,
+                // Only pre-ticked once there are folders to sweep, so the default Clean Now
+                // doesn't detour into adding one.
+                sweepFolders = hasFolders,
                 sweepDevice = true,
                 installedApks = true,
                 trash = TRASH_SUPPORTED,
