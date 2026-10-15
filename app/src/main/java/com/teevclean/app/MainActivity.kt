@@ -127,19 +127,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            TeeVCleanApp(
-                viewModel,
-                onRequestStorageAccess = {
-                    if (viewModel.hasFullStorageAccess()) {
-                        Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
-                    } else {
-                        pickFolder()
-                    }
-                },
-                // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
-                onAddFolder = ::pickFolder,
-                onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ::clearAllAppCaches else null,
-            )
+            // Dialogs take their colours from the Material theme, so it must be the app's dark one.
+            TeeVTheme {
+                TeeVCleanApp(
+                    viewModel,
+                    onRequestStorageAccess = {
+                        if (viewModel.hasFullStorageAccess()) {
+                            Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
+                        } else {
+                            pickFolder()
+                        }
+                    },
+                    // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
+                    onAddFolder = ::pickFolder,
+                    onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ::clearAllAppCaches else null,
+                )
+            }
         }
     }
 
@@ -1007,7 +1010,7 @@ private fun ScheduleDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.schedule_title), color = Muted) },
+        title = { Text(stringResource(R.string.schedule_title)) },
         text = {
             Column(Modifier.verticalScroll(scrollState)) {
                 Text(stringResource(R.string.schedule_frequency_label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -1062,7 +1065,7 @@ private fun ReviewCleanupDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.review_cleanup), color = Muted) },
+        title = { Text(stringResource(R.string.review_cleanup)) },
         text = {
             Column(Modifier.verticalScroll(scrollState)) {
                 Text(stringResource(R.string.review_always_included, formatBytes(cacheSize)), color = Muted, fontSize = 14.sp)
