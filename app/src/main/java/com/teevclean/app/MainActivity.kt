@@ -1012,12 +1012,9 @@ private const val RARELY_USED_DAYS = 90L
 
 private fun hasUsageStatsPermission(context: Context): Boolean {
     val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
-    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-    } else {
-        @Suppress("DEPRECATION")
-        appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-    }
+    // checkOpNoThrow was deprecated in API 29 for unsafeCheckOpNoThrow, then restored in API 36
+    // (which deprecated unsafeCheckOpNoThrow); it behaves the same on every API level.
+    val mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
     // MODE_DEFAULT defers to the regular permission check (used by some OEM settings screens).
     return if (mode == AppOpsManager.MODE_DEFAULT) {
         context.checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED
