@@ -284,8 +284,6 @@ fun TeeVCleanApp(
 
     if (showCleanup) {
         ReviewCleanupDialog(
-            cacheSize = viewModel.cacheSize,
-            options = viewModel.scheduleOptions,
             hasFolders = viewModel.customFolders.isNotEmpty(),
             hasStorageAccess = viewModel.hasFullStorageAccess(),
             onDismiss = { showCleanup = false },
@@ -295,6 +293,9 @@ fun TeeVCleanApp(
             showCleanup = false
             Toast.makeText(context, R.string.cleaning_in_progress, Toast.LENGTH_SHORT).show()
             viewModel.cleanNow(options) { result -> cleanupResult = result }
+            if (options.appCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                onClearAllCaches?.invoke()
+            }
         }
     }
     if (showSweep) {
@@ -1089,19 +1090,27 @@ private fun ScheduleDialog(
 }
 
 /**
- * Overview's Review Clean-up: runs the schedule's clean-up now. The options start as the
- * schedule's and can be changed for this run only; TeeVClean's own cache is always cleared.
+ * Overview's Review Clean-up: runs clean-up now with all items selected by default.
  */
 @Composable
 private fun ReviewCleanupDialog(
-    cacheSize: Long,
-    options: ScheduleOptions,
     hasFolders: Boolean,
     hasStorageAccess: Boolean,
     onDismiss: () -> Unit,
     onClean: (ScheduleOptions) -> Unit,
 ) {
-    var selected by remember { mutableStateOf(options) }
+    val hasAppCaches = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    var selected by remember {
+        mutableStateOf(
+            ScheduleOptions(
+                appCaches = hasAppCaches && hasStorageAccess,
+                sweepFolders = hasFolders,
+                sweepDevice = hasStorageAccess,
+                installedApks = hasStorageAccess || hasFolders,
+                trash = hasStorageAccess && TRASH_SUPPORTED,
+            )
+        )
+    }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     // As in the schedule dialog: focusing Clean Now scrolls the footer into view.
@@ -1113,17 +1122,13 @@ private fun ReviewCleanupDialog(
         title = { Text(stringResource(R.string.review_cleanup)) },
         text = {
             Column(Modifier.verticalScroll(scrollState)) {
-                Text(stringResource(R.string.review_always_included, formatBytes(cacheSize)), color = Muted, fontSize = 14.sp)
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.schedule_also_clean), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                CleanupOptionsList(selected, hasFolders, hasStorageAccess) { selected = it }
+                CleanupOptionsList(selected, hasFolders, hasStorageAccess, showAppCaches = true) { selected = it }
                 Spacer(Modifier.height(20.dp))
                 Text(stringResource(R.string.review_footer), color = Muted, fontSize = 13.sp)
             }
         },
         confirmButton = {
-            TvButton(modifier = revealBottom, onClick = { onClean(selected.availableOnly(hasFolders, hasStorageAccess)) }) {
+            TvButton(modifier = revealBottom, onClick = { onClean(selected.availableOnly(hasFolders, hasStorageAccess, hasAppCaches)) }) {
                 Text(stringResource(R.string.clean_now))
             }
         },
@@ -1132,15 +1137,21 @@ private fun ReviewCleanupDialog(
     )
 }
 
-/** The "Also clean" options shared by the schedule and Review Clean-up, plus a hint when some can't run. */
+/** The cleanup options list, plus a hint when some can't run. */
 @Composable
 private fun CleanupOptionsList(
     selected: ScheduleOptions,
     hasFolders: Boolean,
     hasStorageAccess: Boolean,
+    showAppCaches: Boolean = false,
     onChange: (ScheduleOptions) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            ScheduleToggle(stringResource(R.string.all_app_caches), selected.appCaches, hasStorageAccess) {
+                onChange(selected.copy(appCaches = !selected.appCaches))
+            }
+        }
         ScheduleToggle(stringResource(R.string.schedule_clean_sweep), selected.sweepFolders, hasFolders) {
             onChange(selected.copy(sweepFolders = !selected.sweepFolders))
         }
@@ -1156,7 +1167,7 @@ private fun CleanupOptionsList(
             }
         }
     }
-    if (!hasFolders || !hasStorageAccess) {
+    if (!hasFolders || !hasStorageAccess || (showAppCaches && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.schedule_unavailable_hint), color = Muted, fontSize = 13.sp)
     }
@@ -1165,8 +1176,9 @@ private fun CleanupOptionsList(
 /** Android's trash only exists from Android 11. */
 private val TRASH_SUPPORTED = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
-/** These options with the ones that can't run here (no custom folder, no all-files access, no trash) turned off. */
-private fun ScheduleOptions.availableOnly(hasFolders: Boolean, hasStorageAccess: Boolean) = ScheduleOptions(
+/** These options with the ones that can't run here turned off. */
+private fun ScheduleOptions.availableOnly(hasFolders: Boolean, hasStorageAccess: Boolean, hasAppCaches: Boolean = false) = ScheduleOptions(
+    appCaches = appCaches && hasStorageAccess && hasAppCaches,
     sweepFolders = sweepFolders && hasFolders,
     sweepDevice = sweepDevice && hasStorageAccess,
     installedApks = installedApks && (hasStorageAccess || hasFolders),

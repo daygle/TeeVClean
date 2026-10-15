@@ -132,6 +132,8 @@ object ScheduleTiming {
 
 /** What the background cleanup does besides clearing TeeVClean's own cache, which it always does. */
 data class ScheduleOptions(
+    /** Application caches (cleared via system prompt on Android 11+). */
+    val appCaches: Boolean = false,
     /** Temp/log sweep of the folders added in Settings. */
     val sweepFolders: Boolean = false,
     /** The same sweep across all shared device storage (needs all-files access). */
@@ -141,7 +143,7 @@ data class ScheduleOptions(
     /** Media waiting in Android's trash (Android 11+, needs all-files access). */
     val trash: Boolean = false,
 ) {
-    val extrasCount: Int get() = listOf(sweepFolders, sweepDevice, installedApks, trash).count { it }
+    val extrasCount: Int get() = listOf(appCaches, sweepFolders, sweepDevice, installedApks, trash).count { it }
 }
 
 /** A device-storage breakdown. [systemAndOtherBytes] is what used space isn't attributed to user apps. */

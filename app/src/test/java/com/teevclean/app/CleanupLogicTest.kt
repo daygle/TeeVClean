@@ -153,7 +153,7 @@ class CleanupLogicTest {
     fun `schedule options count the opted-in extras`() {
         assertEquals(0, ScheduleOptions().extrasCount)
         assertEquals(2, ScheduleOptions(sweepDevice = true, trash = true).extrasCount)
-        assertEquals(4, ScheduleOptions(sweepFolders = true, sweepDevice = true, installedApks = true, trash = true).extrasCount)
+        assertEquals(5, ScheduleOptions(appCaches = true, sweepFolders = true, sweepDevice = true, installedApks = true, trash = true).extrasCount)
     }
 
     @Test
