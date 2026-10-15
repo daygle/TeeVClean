@@ -86,7 +86,7 @@
     <string name="scanning">Scanning…</string>
     <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
 
-    <string name="settings_cleanup_schedule">Weekly Clean-up Schedule</string>
+    <string name="settings_cleanup_schedule">Automatic Clean-up</string>
     <string name="settings_permissions">Application Permission</string>
     <string name="settings_usage_access">Usage Access</string>
     <string name="settings_usage_access_granted">Granted</string>

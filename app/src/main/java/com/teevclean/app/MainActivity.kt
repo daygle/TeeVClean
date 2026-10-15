@@ -61,9 +61,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -189,6 +192,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 fun TeeVCleanApp(
     viewModel: TeeVViewModel,
     onRequestStorageAccess: () -> Unit,
@@ -220,6 +224,13 @@ fun TeeVCleanApp(
             // with focus. Only restore if focus is still lost a frame later, or it would be
             // pulled straight back out of the sidebar.
             if (!appHasFocus.value && focusWasInContent.value) contentFocus.tryRequestFocus()
+        }
+    }
+
+    val restoreFocusToContentTop = {
+        scope.launch {
+            withFrameNanos { }
+            contentFocus.tryRequestFocus()
         }
     }
 
@@ -307,6 +318,20 @@ fun TeeVCleanApp(
                         .weight(1f)
                         .onFocusChanged { if (it.hasFocus) focusWasInContent.value = true }
                         .focusRequester(contentFocus)
+                        // D-pad Right from the sidebar would land on whatever item is level with
+                        // the focused menu entry (e.g. "System Uptime" from "Device Health").
+                        // Cancel that move and request the content instead, which enters it at
+                        // its first item.
+                        .focusProperties {
+                            enter = { direction ->
+                                if (direction == FocusDirection.Right) {
+                                    restoreFocusToContentTop()
+                                    FocusRequester.Cancel
+                                } else {
+                                    FocusRequester.Default
+                                }
+                            }
+                        }
                         .focusGroup()
                 ) {
                     when (viewModel.currentScreen) {
