@@ -25,7 +25,6 @@
     <string name="used_of_total">%1$s of %2$s Used</string>
     <string name="available_space_label">Available Space</string>
     <string name="review_cleanup">Clean-up</string>
-    <string name="review_always_included">Always Included: TeeVClean Cache (%1$s)</string>
     <string name="review_footer">Your own files are never touched here - use Files or Duplicates for those.</string>
     <string name="clean_now">Clean Now</string>
     <string name="cleaning_in_progress">Cleaning Up…</string>
