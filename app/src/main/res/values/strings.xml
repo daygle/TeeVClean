@@ -173,9 +173,9 @@
     </plurals>
     <string name="storage_breakdown">Storage</string>
     <string name="storage_breakdown_desc">See what is using space on your TV: applications, the system, and how much space is free.</string>
-    <string name="breakdown_apps">Applications and Their Data</string>
+    <string name="breakdown_apps">Applications/Data</string>
     <string name="breakdown_app_cache">Temporary Files (Cache)</string>
-    <string name="breakdown_system_other">System and Other Files</string>
+    <string name="breakdown_system_other">System/Other Files</string>
     <string name="breakdown_free">Free Space</string>
     <string name="breakdown_needs_usage">To see how much space your applications use, allow Usage Access in Settings.</string>
 
