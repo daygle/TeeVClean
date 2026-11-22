@@ -1,0 +1,159 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+# Never cancel a release mid-publish; queue a re-pushed tag behind the running one.
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build AAB and publish to GitHub Releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+          add-job-summary: always
+
+      # Sets up the Android SDK environment. AGP auto-provisions the platform/build-tools
+      # it needs, but the action's default 'packages' input ('tools platform-tools') fails
+      # because the obsolete 'tools' package is gone from Google's SDK repository.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      # versionCode must increase with every release, so derive it from the semantic
+      # version in the tag (v1.2.3 -> 1002003) rather than the workflow run number,
+      # which resets and is unrelated to the version.
+      - name: Extract version from tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if [[ ! "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not a semantic version (expected vMAJOR.MINOR.PATCH[-PRERELEASE])"
+            exit 1
+          fi
+          MAJOR=$((10#${BASH_REMATCH[1]})); MINOR=$((10#${BASH_REMATCH[2]})); PATCH=$((10#${BASH_REMATCH[3]}))
+          if (( MAJOR > 2099 || MINOR > 999 || PATCH > 999 )); then
+            echo "::error::Version $VERSION does not fit the versionCode scheme (MAJOR<=2099, MINOR<=999, PATCH<=999)"
+            exit 1
+          fi
+          VERSION_CODE=$(( MAJOR * 1000000 + MINOR * 1000 + PATCH ))
+          PRERELEASE=false
+          [[ -n "${BASH_REMATCH[4]}" ]] && PRERELEASE=true
+          {
+            echo "VERSION_NAME=$VERSION"
+            echo "VERSION_CODE=$VERSION_CODE"
+            echo "PRERELEASE=$PRERELEASE"
+          } >> "$GITHUB_ENV"
+          echo "Releasing version $VERSION (versionCode $VERSION_CODE, prerelease $PRERELEASE)"
+
+      # Lint gates the release, so no lint error reaches Play.
+      - name: Lint
+        run: ./gradlew lintRelease --warning-mode=fail --stacktrace
+
+      # Releases are a signed App Bundle only; an unsigned bundle cannot be uploaded to
+      # Play, so missing signing secrets fail the release instead of producing one.
+      - name: Decode release keystore
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_B64" ]; then
+            echo "::error::Repository secret RELEASE_KEYSTORE_B64 is not set (see RELEASING.md 'Release signing')."
+            exit 1
+          fi
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Unit tests and signed release bundle
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest bundleRelease --warning-mode=fail --stacktrace
+
+      # Fail loudly rather than publishing an unsigned bundle.
+      - name: Verify bundle signature and name it after the version
+        run: |
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          if [ ! -f "$AAB" ]; then
+            echo "::error::No bundle at $AAB."
+            ls -l app/build/outputs/bundle/release/ || true
+            exit 1
+          fi
+          OUT=$(jarsigner -verify "$AAB")
+          # Compare in the shell instead of piping through `grep -q`: grep exits on its first
+          # match, so the producer dies with a "Broken pipe" write error in the log.
+          if [[ "$OUT" != *"jar verified"* ]]; then
+            echo "$OUT"
+            echo "::error::$AAB is not signed."
+            exit 1
+          fi
+          mv "$AAB" "app/build/outputs/bundle/release/TeeVClean-$VERSION_NAME-release.aab"
+
+      # archive: false uploads the .aab as-is instead of wrapping it in a zip.
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: app/build/outputs/bundle/release/TeeVClean-${{ env.VERSION_NAME }}-release.aab
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      # The mapping file is embedded in the .aab for Play; keep a copy so stack traces
+      # can also be retraced locally.
+      - name: Upload R8 mapping
+        uses: actions/upload-artifact@v7
+        with:
+          name: TeeVClean-debug-files-${{ env.VERSION_NAME }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+          retention-days: 90
+
+      # Upstream action bug (softprops/action-gh-release#827): when a release for the tag
+      # already exists (a re-run or a re-fired build), the action PATCHes it again with
+      # generate_release_notes: true, and GitHub merges the fresh notes into the old body
+      # instead of replacing it - duplicated "What's Changed" sections. Clearing the body
+      # first makes the regeneration start clean. Idempotent: a first build is untouched.
+      - name: Clear stale release body on re-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes ""
+            echo "::notice::Release $TAG already existed (re-run/re-fired build); cleared its body so notes regenerate without duplication."
+          else
+            echo "No existing release for $TAG; creating fresh."
+          fi
+
+      - name: Create GitHub Release and upload AAB
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: app/build/outputs/bundle/release/*.aab
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ env.PRERELEASE }}
