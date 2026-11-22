@@ -85,6 +85,15 @@ android {
     lint {
         disable.add("IconMissingDensityFolder")
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric renders the real Compose tree for store screenshots, so it needs
+            // the merged resources and native graphics (see ScreenshotRenderTest).
+            isIncludeAndroidResources = true
+            all { it.systemProperty("robolectric.graphicsMode", "NATIVE") }
+        }
+    }
 }
 
 dependencies {
@@ -104,6 +113,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.14.12")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.test.ext:junit-ktx:1.3.0")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }
