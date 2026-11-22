@@ -25,7 +25,7 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 ## 🛠 Tech Stack
 
 - **UI**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with [Compose for TV](https://developer.android.com/tv/compose)
-- **Build System**: Gradle 9.8.1 with **AGP 9.3.2** (Built-in Kotlin Support)
+- **Build System**: Gradle 9.9.2 with **AGP 9.5.2** (Built-in Kotlin Support)
 - **Language**: Kotlin 2.4+
 - **Architecture**: MVI-inspired UI state management
 - **Background Tasks**: [WorkManager](https://developer.android.com/topic/libraries/architecture/workmanager) for scheduled cleanups
@@ -56,7 +56,7 @@ graph TD
 
 ### Prerequisites
 - Android Studio Ladybug (or newer)
-- Android SDK 35
+- Android SDK 37.2
 - Java 21
 
 ### Build Instructions
