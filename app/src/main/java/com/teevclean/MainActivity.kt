@@ -1,21 +1,14 @@
 package com.teevclean
 
-import android.app.AppOpsManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.net.Uri
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.runtime.key
-import java.io.File
-import android.os.Process
 import android.os.SystemClock
 import android.os.storage.StorageManager
 import android.provider.Settings
@@ -26,14 +19,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -45,25 +34,32 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -78,19 +74,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.launch
+import java.io.File
 import java.text.DateFormat
-import androidx.compose.runtime.mutableIntStateOf
 import java.util.Calendar
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.layout.widthIn
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: TeeVViewModel by viewModels()
@@ -144,12 +140,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Whether the legacy storage grant was asked for to reach the built-in folder browser. */
+    private var browseAfterGrant = false
+
     private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        val browse = browseAfterGrant
+        browseAfterGrant = false
         if (granted.values.any { it }) {
             viewModel.refreshData()
             // On a TV with no system folder picker this grant is the only way into storage, so go
             // straight to the built-in browser instead of asking the user to pick a folder again.
-            if (viewModel.hasFullStorageAccess()) {
+            if (browse && viewModel.hasFullStorageAccess()) {
                 viewModel.folderBrowserOpen = true
             }
         }
@@ -171,6 +172,7 @@ class MainActivity : ComponentActivity() {
                             pickFolder()
                         }
                     },
+                    onRequestFullAccess = ::requestFullStorageAccess,
                     // Duplicate and temp-file scans only cover picked folders, so adding one is always allowed.
                     onAddFolder = ::pickFolder,
                     onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { then -> clearAllAppCaches(then) } else null,
@@ -180,7 +182,7 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { offerOwnBrowser.value = false },
                         onUseOwnBrowser = {
                             offerOwnBrowser.value = false
-                            requestLegacyStorageAccess()
+                            requestLegacyStorageAccess(browseAfter = true)
                         },
                     )
                 }
@@ -215,15 +217,31 @@ class MainActivity : ComponentActivity() {
      * the legacy permissions, so write access is asked for alongside read. Both are needed:
      * [TeeVRepository.hasFullStorageAccess] refuses to treat a read-only grant as full access, so
      * files that could not be deleted are never offered. Only reached below API 30; Android 11+
-     * asks for all-files access instead.
+     * asks for all-files access instead. [browseAfter] opens the built-in folder browser once
+     * granted.
      */
-    private fun requestLegacyStorageAccess() {
+    private fun requestLegacyStorageAccess(browseAfter: Boolean) {
+        browseAfterGrant = browseAfter
         storagePermissionLauncher.launch(
             arrayOf(
                 android.Manifest.permission.READ_EXTERNAL_STORAGE,
                 android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
             ),
         )
+    }
+
+    /**
+     * Asks for the access the device-wide clean-ups need: all-files access on Android 11+ (granted
+     * in a settings screen), or the legacy read and write permissions on Android 7-10. Picking a
+     * folder doesn't grant it, so this never opens the folder picker.
+     */
+    private fun requestFullStorageAccess() {
+        when {
+            viewModel.hasFullStorageAccess() ->
+                Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> openAllFilesAccessSettings()
+            else -> requestLegacyStorageAccess(browseAfter = false)
+        }
     }
 
     /**
@@ -271,7 +289,7 @@ class MainActivity : ComponentActivity() {
                 try {
                     startActivity(genericIntent)
                 } catch (_: Exception) {
-                    Toast.makeText(this, R.string.feature_not_supported, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, R.string.all_files_settings_unavailable, Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -282,7 +300,10 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalComposeUiApi::class)
 fun TeeVCleanApp(
     viewModel: TeeVViewModel,
+    /** Gives TeeVClean somewhere to scan: a picked folder, or direct access where there is no picker. */
     onRequestStorageAccess: () -> Unit,
+    /** Asks for all-files access (Android 11+) or the legacy storage permissions (Android 7-10). */
+    onRequestFullAccess: () -> Unit,
     onAddFolder: () -> Unit,
     /** Opens Android's clear-all-caches prompt (Android 11+), then runs the given continuation once it closes. */
     onClearAllCaches: ((then: () -> Unit) -> Unit)?,
@@ -355,14 +376,16 @@ fun TeeVCleanApp(
         }
     }
 
+    val access = viewModel.access
     if (showCleanup) {
         ReviewCleanupDialog(
             hasFolders = viewModel.customFolders.isNotEmpty(),
-            hasStorageAccess = viewModel.hasFullStorageAccess(),
+            hasStorageAccess = access.allFiles,
             onDismiss = { showCleanup = false },
+            // The device-wide options need all-files access, which a picked folder doesn't give.
             onRequireStorage = {
                 showCleanup = false
-                onRequestStorageAccess()
+                onRequestFullAccess()
             },
         ) { options ->
             // Closed straight away: a device-wide sweep can take a while, and a second press
@@ -409,7 +432,7 @@ fun TeeVCleanApp(
             options = viewModel.scheduleOptions,
             minuteOfDay = viewModel.scheduleMinuteOfDay,
             hasFolders = viewModel.customFolders.isNotEmpty(),
-            hasStorageAccess = viewModel.hasFullStorageAccess(),
+            hasStorageAccess = access.allFiles,
             onDismiss = { showSchedule = false },
             onSave = { frequency, options, minuteOfDay ->
                 viewModel.setSchedule(frequency, options, minuteOfDay)
@@ -418,7 +441,8 @@ fun TeeVCleanApp(
         )
     }
 
-    MaterialTheme {
+    // The app theme (not Material's defaults), so dialogs read right wherever this is hosted.
+    TeeVTheme {
         Surface(Modifier.fillMaxSize(), color = Ink) {
             // Android TV safe area: 48dp left/right and 27dp top/bottom stay clear of overscan.
             Row(
@@ -470,7 +494,7 @@ fun TeeVCleanApp(
                             onNavigate = { viewModel.currentScreen = it },
                         )
                         Screen.LARGE -> {
-                            if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty() && !viewModel.hasFullStorageAccess()) {
+                            if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty() && !access.allFiles) {
                                 PermissionRationale(
                                     stringResource(R.string.large_files),
                                     stringResource(R.string.storage_access_rationale),
@@ -490,7 +514,7 @@ fun TeeVCleanApp(
                         }
                         Screen.APPS -> ApplicationsScreen(
                             apps = viewModel.apps,
-                            hasUsageAccess = hasUsageStatsPermission(context),
+                            hasUsageAccess = access.usage,
                             onEnableUsage = { openUsageAccessSettings(context) },
                             onOpenInfo = { viewModel.openAppInfo(it) },
                             onUninstall = { viewModel.uninstallApp(it) },
@@ -517,12 +541,12 @@ fun TeeVCleanApp(
                             scheduleTimes = scheduleTimesText(viewModel.cleanupFrequency, viewModel.lastAutomaticRun, viewModel.nextScheduledRun),
                             customFolders = viewModel.customFolders,
                             missingFolders = viewModel.missingFolders,
-                            hasUsageAccess = hasUsageStatsPermission(context),
-                            hasStorageAccess = hasStorageAccessPermission(context, viewModel),
+                            access = access,
                             appVersion = BuildConfig.VERSION_NAME,
                             onEditSchedule = { showSchedule = true },
                             onEnableUsage = { openUsageAccessSettings(context) },
                             onEnableStorage = onRequestStorageAccess,
+                            onEnableAllFiles = onRequestFullAccess,
                             onAddFolder = onAddFolder,
                             onRemoveFolder = { viewModel.removeCustomFolder(it) },
                         )
@@ -555,8 +579,8 @@ private fun Dashboard(
                 FeatureCard(
                     stringResource(R.string.storage_breakdown),
                     stringResource(R.string.storage_breakdown_desc),
-                    "Storage",
-                    "View",
+                    stringResource(R.string.badge_storage),
+                    stringResource(R.string.card_view),
                     Screen.BREAKDOWN.icon
                 ) { onNavigate(Screen.BREAKDOWN) }
             }
@@ -564,8 +588,8 @@ private fun Dashboard(
                 FeatureCard(
                     stringResource(R.string.history_title),
                     stringResource(R.string.history_card_desc),
-                    "Log",
-                    "View",
+                    stringResource(R.string.badge_log),
+                    stringResource(R.string.card_view),
                     Screen.HISTORY.icon
                 ) { onNavigate(Screen.HISTORY) }
             }
@@ -573,8 +597,8 @@ private fun Dashboard(
                 FeatureCard(
                     stringResource(R.string.large_files),
                     stringResource(R.string.feature_large_files_desc),
-                    "Files",
-                    if (files.isEmpty()) "Scan" else formatBytes(files.sumOf { it.size }),
+                    stringResource(R.string.badge_files),
+                    if (files.isEmpty()) stringResource(R.string.card_scan) else formatBytes(files.sumOf { it.size }),
                     Screen.LARGE.icon
                 ) { onNavigate(Screen.LARGE) }
             }
@@ -582,8 +606,8 @@ private fun Dashboard(
                 FeatureCard(
                     stringResource(R.string.apps),
                     pluralStringResource(R.plurals.feature_app_review_desc, apps.size, apps.size),
-                    "Apps",
-                    "Guided",
+                    stringResource(R.string.badge_apps),
+                    stringResource(R.string.card_guided),
                     Screen.APPS.icon
                 ) { onNavigate(Screen.APPS) }
             }
@@ -591,8 +615,8 @@ private fun Dashboard(
                 FeatureCard(
                     stringResource(R.string.device_health),
                     stringResource(R.string.feature_device_health_desc),
-                    "Health",
-                    "Check",
+                    stringResource(R.string.badge_health),
+                    stringResource(R.string.card_check),
                     Screen.HEALTH.icon
                 ) { onNavigate(Screen.HEALTH) }
             }
@@ -691,8 +715,6 @@ private fun LargeFilesScreen(
     var showConfirm by remember { mutableStateOf(false) }
     var showFilterSettings by remember { mutableStateOf(false) }
 
-    val largeBytes = filter.minSize
-
     val filteredFiles = remember(files, activeFilters, filter) {
         val nowMillis = now()
         files.filter { file ->
@@ -746,9 +768,15 @@ private fun LargeFilesScreen(
                 Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                val gb = 1024L * 1024 * 1024
+                val sizeLabel = if (filter.minSize >= gb) {
+                    stringResource(R.string.chip_min_size_gb, (filter.minSize / gb).toInt())
+                } else {
+                    stringResource(R.string.chip_min_size_mb, (filter.minSize / (1024 * 1024)).toInt())
+                }
                 val filterOptions = mutableListOf(
-                    (if (largeBytes >= 1024 * 1024 * 1024) "${largeBytes / (1024 * 1024 * 1024)} GB+" else "${largeBytes / (1024 * 1024)} MB+") to 0,
-                    "${filter.minAgeDays} Days+" to 1
+                    sizeLabel to 0,
+                    pluralStringResource(R.plurals.chip_min_age_days, filter.minAgeDays, filter.minAgeDays) to 1,
                 )
                 if (filter.showInstallers) {
                     filterOptions.add(stringResource(R.string.filter_installers) to 2)
@@ -806,9 +834,14 @@ private fun ApplicationsScreen(
     onUninstall: (String) -> Unit,
     now: () -> Long = System::currentTimeMillis,
 ) {
-    val rarelyUsed = remember(apps) {
+    val rarelyUsed = remember(apps, hasUsageAccess) {
         val cutoff = now() - TimeUnit.DAYS.toMillis(RARELY_USED_DAYS)
-        apps.filter { it.lastUsed in 1L until cutoff }.take(6)
+        apps.filter { app ->
+            // With usage access, no recorded use means none in the whole usage window, the least
+            // used of all; only apps installed before the cutoff count, so new ones aren't flagged.
+            app.lastUsed in 1L until cutoff ||
+                (hasUsageAccess && app.lastUsed == 0L && app.installedAt in 1L until cutoff)
+        }.take(6)
     }
 
     ScreenScaffold(stringResource(R.string.apps), stringResource(R.string.app_review_desc)) {
@@ -833,8 +866,8 @@ private fun ApplicationsScreen(
                 items(rarelyUsed, key = { "rare:${it.packageName}" }) { app ->
                     AppRow(
                         title = app.label,
-                        subtitle = lastUsedText(app.lastUsed),
-                        subtitleColor = Color(0xFFFFB74D),
+                        subtitle = lastUsedText(app.lastUsed, hasUsageAccess),
+                        subtitleColor = Warning,
                         size = formatBytes(app.size),
                         action = stringResource(R.string.uninstall),
                         background = Color(0xFF2A211C),
@@ -848,7 +881,7 @@ private fun ApplicationsScreen(
             items(apps, key = { it.packageName }) { app ->
                 AppRow(
                     title = app.label,
-                    subtitle = "${app.packageName} • ${lastUsedText(app.lastUsed)}",
+                    subtitle = "${app.packageName} • ${lastUsedText(app.lastUsed, hasUsageAccess)}",
                     subtitleColor = Muted,
                     size = formatBytes(app.size),
                     action = stringResource(R.string.app_info_btn),
@@ -983,7 +1016,7 @@ private fun StorageBreakdownScreen(
 
 @Composable
 private fun BreakdownCard(breakdown: StorageBreakdown) {
-    val orange = Color(0xFFFFB74D)
+    val orange = Warning
     val gray = Color(0xFF303930)
     val total = breakdown.totalBytes.coerceAtLeast(1)
     val appsFrac = breakdown.appsBytes.toFloat() / total
@@ -1025,17 +1058,45 @@ private fun BreakdownRow(label: String, value: String, swatch: Color, indent: Bo
 
 @Composable
 private fun HealthScreen(context: Context, storage: StorageSummary) {
-    val manager = context.getSystemService(ConnectivityManager::class.java)
-    val network = manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    val network = remember { hasInternet(context) }
+    val healthy = storage.fraction <= LOW_SPACE_FRACTION
     ScreenScaffold(stringResource(R.string.device_health), stringResource(R.string.device_health_desc)) {
         ScreenList(spacing = 10.dp) {
-            item { ResultRow(stringResource(R.string.storage_pressure), if (storage.fraction > .85) stringResource(R.string.storage_pressure_low) else stringResource(R.string.storage_pressure_healthy), "${(storage.fraction * 100).toInt()}% Used", storage.fraction <= .85f) }
+            item {
+                ResultRow(
+                    stringResource(R.string.storage_pressure),
+                    stringResource(if (healthy) R.string.storage_pressure_healthy else R.string.storage_pressure_low),
+                    stringResource(R.string.percent_used, (storage.fraction * 100).toInt()),
+                    healthy,
+                )
+            }
             item { ResultRow(stringResource(R.string.network_label), if (network) stringResource(R.string.network_connected) else stringResource(R.string.network_offline), if (network) stringResource(R.string.connected) else stringResource(R.string.offline), network) }
-            item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), formatDuration(SystemClock.elapsedRealtime()), true) }
+            item { ResultRow(stringResource(R.string.system_uptime), stringResource(R.string.system_uptime_desc), uptimeText(SystemClock.elapsedRealtime()), true) }
             item { ResultRow(stringResource(R.string.device_model), Build.MANUFACTURER, Build.MODEL, true) }
-            item { ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), "Android ${Build.VERSION.RELEASE}", true) }
+            item { ResultRow(stringResource(R.string.android_version), stringResource(R.string.android_version_desc), stringResource(R.string.android_release, Build.VERSION.RELEASE), true) }
             item { Text(stringResource(R.string.thermal_disclaimer), color = Muted, fontSize = 13.sp) }
         }
+    }
+}
+
+/** Whether the active network reaches the internet; false when it can't be read. */
+private fun hasInternet(context: Context): Boolean = try {
+    val manager = context.getSystemService(ConnectivityManager::class.java)
+    manager?.getNetworkCapabilities(manager.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+} catch (_: SecurityException) {
+    false
+}
+
+/** Time since boot as "2 days, 3 hours" (or just the hours under a day). */
+@Composable
+private fun uptimeText(milliseconds: Long): String {
+    val totalHours = TimeUnit.MILLISECONDS.toHours(milliseconds.coerceAtLeast(0L)).toInt()
+    val days = totalHours / 24
+    val hoursText = pluralStringResource(R.plurals.uptime_hours, totalHours % 24, totalHours % 24)
+    return if (days > 0) {
+        stringResource(R.string.uptime_days_hours, pluralStringResource(R.plurals.uptime_days, days, days), hoursText)
+    } else {
+        hoursText
     }
 }
 
@@ -1368,7 +1429,7 @@ private fun FolderRow(label: String, modifier: Modifier = Modifier, onClick: () 
     )
 }
 
-/** An on/off option in the schedule dialog; a tick marks it as on, since chip colour alone is easy to miss. */
+/** An on/off option in a dialog; a tick marks it as on, since chip colour alone is easy to miss. */
 @Composable
 private fun ScheduleToggle(label: String, on: Boolean, available: Boolean, onFlip: () -> Unit) {
     val active = on && available
@@ -1421,7 +1482,7 @@ private fun FilterDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.filter_settings), color = Muted) },
+        title = { Text(stringResource(R.string.filter_settings)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.filter_min_size), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -1440,10 +1501,9 @@ private fun FilterDialog(
                     }
                 }
                 Spacer(Modifier.height(18.dp))
-                SelectableChip(
-                    stringResource(R.string.filter_show_installers),
-                    selected = filter.showInstallers,
-                ) { filter = filter.copy(showInstallers = !filter.showInstallers) }
+                ScheduleToggle(stringResource(R.string.filter_show_installers), filter.showInstallers, available = true) {
+                    filter = filter.copy(showInstallers = !filter.showInstallers)
+                }
             }
         },
         confirmButton = { TvButton(onClick = { onSave(filter) }) { Text(stringResource(R.string.save)) } },
@@ -1469,19 +1529,6 @@ private fun CleanupResultDialog(result: CleanupResult, onDismiss: () -> Unit) {
 
 private const val RARELY_USED_DAYS = 90L
 
-private fun hasUsageStatsPermission(context: Context): Boolean {
-    val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
-    // checkOpNoThrow was deprecated in API 29 for unsafeCheckOpNoThrow, then restored in API 36
-    // (which deprecated unsafeCheckOpNoThrow); it behaves the same on every API level.
-    val mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-    // MODE_DEFAULT defers to the regular permission check (used by some OEM settings screens).
-    return if (mode == AppOpsManager.MODE_DEFAULT) {
-        context.checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED
-    } else {
-        mode == AppOpsManager.MODE_ALLOWED
-    }
-}
-
 private fun openUsageAccessSettings(context: Context) {
     try {
         context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
@@ -1490,14 +1537,14 @@ private fun openUsageAccessSettings(context: Context) {
     }
 }
 
-private fun hasStorageAccessPermission(context: Context, viewModel: TeeVViewModel): Boolean {
-    return context.contentResolver.persistedUriPermissions.isNotEmpty() || viewModel.hasFullStorageAccess()
-}
-
+/**
+ * When an app was last used. With usage access, no date means no use within the whole usage
+ * window rather than "unknown".
+ */
 @Composable
-private fun lastUsedText(timestamp: Long): String =
+private fun lastUsedText(timestamp: Long, hasUsageAccess: Boolean): String =
     if (timestamp == 0L) {
-        stringResource(R.string.last_used_unavailable)
+        stringResource(if (hasUsageAccess) R.string.not_used_recently else R.string.last_used_unavailable)
     } else {
         stringResource(R.string.last_used_at, DateFormat.getDateInstance(DateFormat.MEDIUM).format(timestamp))
     }

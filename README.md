@@ -62,8 +62,8 @@ graph TD
 
 ## 🔐 Permissions
 
-TeeVClean declares five permissions of its own and no `INTERNET` permission, so nothing it reads
-can be uploaded. All five are in
+TeeVClean declares six permissions of its own and no `INTERNET` permission, so nothing it reads
+can be uploaded. All six are in
 [`app/src/main/AndroidManifest.xml`](app/src/main/AndroidManifest.xml); WorkManager merges a few
 of its own into the built manifest, listed further down.
 
@@ -71,7 +71,8 @@ of its own into the built manifest, listed further down.
 | --- | --- | --- |
 | `QUERY_ALL_PACKAGES` | Lists installed apps with their names and sizes for Applications, Storage Breakdown and Guided App Cache, and checks whether an APK on disk belongs to an app that is already installed. | Granted at install time. Google Play requires a declaration form for it. |
 | `PACKAGE_USAGE_STATS` | Optional. Reads each app's last-used time for the Applications list, and unlocks per-app size and cache figures from `StorageStatsManager` in Storage Breakdown. | Special access the user enables in system Settings; the Settings screen opens that page. Without it, last-used dates read as unknown and apps fall back to rough sizes. |
-| `MANAGE_EXTERNAL_STORAGE` | All files access: lets the built-in folder browser walk shared storage without a per-folder grant, and is required before Android will show its system-wide "clear all app caches" prompt. | Special access opened with `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` from the Settings screen, the folder-picker fallback or the cache-clear action. **Android 11+ only**; older TVs work from the folders you grant. |
+| `MANAGE_EXTERNAL_STORAGE` | All files access: lets the built-in folder browser walk shared storage without a per-folder grant, and is required before Android will show its system-wide "clear all app caches" prompt. | Special access opened with `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` from the Settings screen's All Files Access row, Overview's Clean-up when a device-wide option needs it, the folder-picker fallback or the cache-clear action. **Android 11+ only**; older TVs work from the folders you grant. |
+| `ACCESS_NETWORK_STATE` | Device Health reports whether the active network reaches the internet. WorkManager also merges it in, but it is declared directly so the check never depends on a library. | Granted at install time. |
 | `READ_EXTERNAL_STORAGE` | Fallback read access on Android 7-10 devices that ship no system folder picker; it is also what `hasFullStorageAccess()` checks below API 30. | Runtime prompt, launched only when the document picker is missing. |
 | `WRITE_EXTERNAL_STORAGE` | Lets TeeVClean delete the shared-storage files it lists on Android 7-10, where those deletions go through the legacy permissions. Capped with `android:maxSdkVersion="29"`, so it stops existing at API 30. | Only requested when you choose TeeVClean's own folder browser on API 29 and below; the system folder picker is always tried first. Both grants are needed: with read access alone the app lists just the folders you grant, instead of offering files it cannot delete. |
 
@@ -86,7 +87,7 @@ targeting 37 and uses all-files access instead.
 The folders you add are SAF grants rather than permissions. TeeVClean opens the system folder
 picker (`ActivityResultContracts.OpenDocumentTree`) and keeps the grant with
 `takePersistableUriPermission`, so it survives reboots until you remove the folder in Settings
-or the grant is revoked. A picker that offers no persistable grant is rejected with a message
+(after a confirmation, since removing it also releases the grant) or the grant is revoked. A picker that offers no persistable grant is rejected with a message
 instead of failing silently later. Folders that can no longer be opened are flagged in Settings
 and skipped by every scan.
 
@@ -155,7 +156,7 @@ Where things live:
   and `TeeVCleanApp` in `MainActivity.kt` switches on `viewModel.currentScreen`. The sidebar
   lists Overview, Cleanup, Large Files, Applications and Device Health and pins Settings at the
   bottom; Storage Breakdown and Clean-up History open from Overview cards, and Duplicates opens
-  from Cleanup.
+  from Cleanup. While a sub-screen is open, the menu highlights the item it was opened from.
 - **Device work**: all file, package and storage reads in `TeeVRepository.kt`, on
   `Dispatchers.IO`. The view model holds state with `mutableStateOf` and forwards user actions.
 - **Scheduled clean-ups**: `CleanupWorker` runs only the unattended-safe categories, records one

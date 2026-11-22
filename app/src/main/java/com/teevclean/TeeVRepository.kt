@@ -1,5 +1,6 @@
 package com.teevclean
 
+import android.app.AppOpsManager
 import android.app.usage.StorageStatsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -37,6 +38,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
@@ -50,7 +52,27 @@ data class StorageSummary(val used: Long, val total: Long) {
     val fraction: Float get() = if (total == 0L) 0f else (used.toFloat() / total).coerceIn(0f, 1f)
 }
 
-data class AppSummary(val label: String, val packageName: String, val size: Long, val lastUsed: Long)
+/**
+ * An installed app. [lastUsed] is 0 when unknown (no usage access, or not used within the
+ * usage window); [installedAt] is 0 when unknown.
+ */
+data class AppSummary(
+    val label: String,
+    val packageName: String,
+    val size: Long,
+    val lastUsed: Long,
+    val installedAt: Long = 0L,
+)
+
+/** The special access TeeVClean has been granted, read together so the UI can observe it. */
+data class AccessState(
+    /** Usage access: last-used dates and per-app storage figures. */
+    val usage: Boolean = false,
+    /** All-files access (Android 11+) or the legacy read+write pair (Android 7-10). */
+    val allFiles: Boolean = false,
+    /** At least one folder granted through the system picker, or all-files access. */
+    val folders: Boolean = false,
+)
 
 /**
  * A large or old file discovered during a scan.
@@ -390,6 +412,31 @@ class TeeVRepository(private val context: Context) {
         return readGranted && writeGranted
     }
 
+    /** Usage access, which Android grants through a special-access settings screen rather than a prompt. */
+    fun hasUsageAccess(): Boolean {
+        val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
+        // checkOpNoThrow was deprecated in API 29 for unsafeCheckOpNoThrow, then restored in API 36
+        // (which deprecated unsafeCheckOpNoThrow); it behaves the same on every API level.
+        val mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+        // MODE_DEFAULT defers to the regular permission check (used by some OEM settings screens).
+        return if (mode == AppOpsManager.MODE_DEFAULT) {
+            context.checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            mode == AppOpsManager.MODE_ALLOWED
+        }
+    }
+
+    /** Every kind of access at once; cheap enough to read on each refresh. */
+    fun readAccess(): AccessState {
+        val allFiles = hasFullStorageAccess()
+        val folders = allFiles || try {
+            context.contentResolver.persistedUriPermissions.isNotEmpty()
+        } catch (_: Exception) {
+            false
+        }
+        return AccessState(usage = hasUsageAccess(), allFiles = allFiles, folders = folders)
+    }
+
     /** Total and available bytes of the data partition. */
     private fun dataPartitionSpace(): Pair<Long, Long> {
         val stat = StatFs(Environment.getDataDirectory().path)
@@ -499,19 +546,21 @@ class TeeVRepository(private val context: Context) {
     /** The clean-up log, newest first. */
     fun getCleanupLog(): List<CleanupLogEntry> = CleanupLogCodec.decode(prefs.getString(KEY_CLEANUP_LOG, null))
 
-    /** Empties the log. The running totals are kept. Synchronized so a run finishing at the same moment can't write the cleared log back. */
-    @Synchronized
-    fun clearCleanupLog() {
+    /**
+     * Empties the log. The running totals are kept. Locked so a run finishing at the same moment
+     * can't write the cleared log back.
+     */
+    fun clearCleanupLog() = synchronized(LOG_LOCK) {
         prefs.edit { remove(KEY_CLEANUP_LOG) }
     }
 
     /**
      * Records one clean-up: adds it to the running totals and logs it. The cleanup functions
      * don't record themselves, so a caller running several (the scheduled job) logs them as
-     * one entry.
+     * one entry. The lock is shared by every repository instance: the scheduled worker and
+     * the UI each create their own, and both read-modify-write the same totals and log.
      */
-    @Synchronized
-    fun recordCleanup(kinds: List<CleanupKind>, result: CleanupResult, automatic: Boolean, complete: Boolean = true) {
+    fun recordCleanup(kinds: List<CleanupKind>, result: CleanupResult, automatic: Boolean, complete: Boolean = true) = synchronized(LOG_LOCK) {
         val now = System.currentTimeMillis()
         val entry = CleanupLogEntry(now, automatic, kinds, result.freedBytes, result.itemsRemoved, complete)
         prefs.edit {
@@ -532,8 +581,8 @@ class TeeVRepository(private val context: Context) {
         var removed = 0
         ownCacheDirs().forEach { dir ->
             dir.listFiles()?.forEach { entry ->
-                val entrySize = folderSize(entry)
-                if (entry.deleteRecursively()) {
+                val entrySize = treeSize(entry)
+                if (deleteTree(entry)) {
                     freed += entrySize
                     removed++
                 }
@@ -583,7 +632,7 @@ class TeeVRepository(private val context: Context) {
                 // APKs are checked against installed apps even when the filter wouldn't list them,
                 // so a redundant installer always shows up under "Already installed".
                 val checked = if (FileClassifier.isApk(file.name)) {
-                    file.copy(alreadyInstalled = isInstalledApk(file.uri))
+                    file.copy(alreadyInstalled = isInstalledApk(file, cached = true))
                 } else {
                     file
                 }
@@ -592,34 +641,68 @@ class TeeVRepository(private val context: Context) {
             .sortedByDescending { it.size }
     }
 
-    /**
-     * True when the APK behind [uriString] belongs to an app that is already installed at the
-     * same or a newer version. SAF documents have no file path, so they are read through their
-     * descriptor's /proc path. Any failure means "not known to be installed".
-     */
-    private fun isInstalledApk(uriString: String): Boolean = try {
-        val uri = uriString.toUri()
-        when (uri.scheme) {
-            "file" -> uri.path?.let { isInstalledArchive(it) } == true
-            "content" -> context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                isInstalledArchive("/proc/self/fd/${pfd.fd}")
-            } == true
-            else -> false
-        }
-    } catch (_: Exception) {
-        false
-    }
+    /** Package and version read from an APK. */
+    private class ArchiveInfo(val packageName: String, val versionCode: Long)
 
-    private fun isInstalledArchive(path: String): Boolean {
-        val pm = context.packageManager
-        val archive = pm.getPackageArchiveInfo(path, 0) ?: return false
+    /**
+     * APK contents by uri, size and date, for the Files listing only. Parsing an APK is slow and
+     * every refresh checks every installer, so an unchanged file is only parsed once; null records
+     * "not a readable APK". Files without a known date are never cached, since nothing would show
+     * that they changed.
+     */
+    private val archiveCache = HashMap<String, ArchiveInfo?>()
+
+    /**
+     * True when the APK [file] belongs to an app that is already installed at the same or a
+     * newer version. The installed version is looked up fresh each time, so installing or
+     * removing the app is picked up straight away. Any failure means "not known to be installed".
+     *
+     * [cached] allows answers from [archiveCache]. Deleting must never act on a stale answer (a
+     * provider can replace a document while keeping its uri, size and date), so callers that
+     * delete pass false and the APK is read again.
+     */
+    private fun isInstalledApk(file: FileSummary, cached: Boolean): Boolean {
+        val key = "${file.uri}|${file.size}|${file.modified}"
+        val archive = when {
+            !cached || file.modified <= 0 -> readArchive(file.uri)
+            else -> synchronized(archiveCache) {
+                if (archiveCache.containsKey(key)) {
+                    archiveCache[key]
+                } else {
+                    if (archiveCache.size >= MAX_ARCHIVE_CACHE) archiveCache.clear()
+                    readArchive(file.uri).also { archiveCache[key] = it }
+                }
+            }
+        } ?: return false
         val installed = try {
-            PackageInfoCompat.getLongVersionCode(pm.getPackageInfo(archive.packageName, 0))
+            PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(archive.packageName, 0))
         } catch (_: PackageManager.NameNotFoundException) {
             null
         }
-        return FileClassifier.isInstallerRedundant(PackageInfoCompat.getLongVersionCode(archive), installed)
+        return FileClassifier.isInstallerRedundant(archive.versionCode, installed)
     }
+
+    /**
+     * Reads an APK's package and version. SAF documents have no file path, so they are read
+     * through their descriptor's /proc path.
+     */
+    private fun readArchive(uriString: String): ArchiveInfo? = try {
+        val uri = uriString.toUri()
+        when (uri.scheme) {
+            "file" -> uri.path?.let { archiveAt(it) }
+            "content" -> context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                archiveAt("/proc/self/fd/${pfd.fd}")
+            }
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun archiveAt(path: String): ArchiveInfo? =
+        context.packageManager.getPackageArchiveInfo(path, 0)?.let {
+            ArchiveInfo(it.packageName, PackageInfoCompat.getLongVersionCode(it))
+        }
 
     /** A document found while walking a granted SAF tree. */
     private class SafEntry(
@@ -719,6 +802,8 @@ class TeeVRepository(private val context: Context) {
                     break
                 }
                 val isDir = child.isDirectory
+                // A linked folder can lead outside the chosen one (or loop), so it is left out.
+                if (isDir && isSymlink(child)) continue
                 entries.add(
                     SafEntry(
                         uri = Uri.fromFile(child),
@@ -746,7 +831,7 @@ class TeeVRepository(private val context: Context) {
         if (entry.uri.scheme != "file") return deleteDocument(entry.uri)
         return try {
             val file = File(entry.documentId)
-            if (recursive) file.deleteRecursively() else file.delete()
+            if (recursive) deleteTree(file) else file.delete()
         } catch (_: Exception) {
             false
         }
@@ -984,8 +1069,8 @@ class TeeVRepository(private val context: Context) {
                     when {
                         dir == root && entry.name.equals("Android", ignoreCase = true) -> Unit
                         sweep && FileClassifier.isJunkFolder(entry.name) -> {
-                            val size = folderSize(entry)
-                            if (entry.deleteRecursively()) {
+                            val size = treeSize(entry)
+                            if (deleteTree(entry)) {
                                 freed += size
                                 removed++
                             }
@@ -1014,7 +1099,7 @@ class TeeVRepository(private val context: Context) {
      * from the same places the Files screen scans.
      */
     suspend fun removeInstalledApks(): CleanupResult = withContext(Dispatchers.IO) {
-        val redundant = scannableFiles().filter { FileClassifier.isApk(it.name) && isInstalledApk(it.uri) }
+        val redundant = scannableFiles().filter { FileClassifier.isApk(it.name) && isInstalledApk(it, cached = false) }
         deleteFiles(redundant)
     }
 
@@ -1081,7 +1166,12 @@ class TeeVRepository(private val context: Context) {
                     val size = packageBytes(statsManager, app.packageName)?.total
                         ?: app.sourceDir?.let { File(it).length() }
                         ?: 0L
-                    AppSummary(app.loadLabel(pm).toString(), app.packageName, size, lastUsed[app.packageName] ?: 0L)
+                    val installedAt = try {
+                        pm.getPackageInfo(app.packageName, 0).firstInstallTime
+                    } catch (_: PackageManager.NameNotFoundException) {
+                        0L
+                    }
+                    AppSummary(app.loadLabel(pm).toString(), app.packageName, size, lastUsed[app.packageName] ?: 0L, installedAt)
                 }
             }.awaitAll()
         }.sortedByDescending { it.size }
@@ -1210,10 +1300,42 @@ class TeeVRepository(private val context: Context) {
         }
     }
 
-    private fun folderSize(root: File): Long =
-        root.walk().filter { it.isFile }.sumOf { it.length() }
+    /**
+     * True when [file] is itself a symbolic link. Kotlin's walk() and deleteRecursively() follow
+     * linked folders, so deleting a junk folder holding a link could empty the link's target;
+     * [treeSize] and [deleteTree] stop at links instead. An unreadable path counts as a link.
+     */
+    private fun isSymlink(file: File): Boolean {
+        val parent = file.parentFile ?: return false
+        return try {
+            val inParent = File(parent.canonicalFile, file.name)
+            inParent.canonicalPath != inParent.absolutePath
+        } catch (_: IOException) {
+            true
+        }
+    }
+
+    /** Bytes in [root] and everything under it, without following linked folders. */
+    private fun treeSize(root: File): Long =
+        if (root.isDirectory) {
+            if (isSymlink(root)) 0L else root.listFiles().orEmpty().sumOf { treeSize(it) }
+        } else {
+            root.length()
+        }
+
+    /** Deletes [root] with everything under it; a linked folder loses only the link itself. */
+    private fun deleteTree(root: File): Boolean {
+        if (root.isDirectory && !isSymlink(root)) root.listFiles()?.forEach { deleteTree(it) }
+        return root.delete()
+    }
 
     companion object {
+        /** Guards the clean-up totals and log across every repository instance in the process. */
+        private val LOG_LOCK = Any()
+
+        /** APKs remembered by [archiveCache] before it starts over. */
+        private const val MAX_ARCHIVE_CACHE = 512
+
         /** Unique WorkManager name; the value predates daily/monthly schedules and must stay stable. */
         const val CLEANUP_WORK = "weekly-cache-cleanup"
         const val INCLUDE_SWEEP = "include_sweep"
