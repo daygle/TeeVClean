@@ -107,7 +107,12 @@ class ScreenshotRenderTest {
         val out = File(repoRoot(), "store-listing/screenshots-rendered/$name.png")
         out.parentFile?.mkdirs()
         FileOutputStream(out).use { exact.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        println("RENDER $name ${exact.width}x${exact.height} (from ${raw.width}x${raw.height}) -> ${out.path}")
+        // Play wants screenshots without an alpha channel; re-encode the fully opaque bitmap.
+        val rendered = javax.imageio.ImageIO.read(out)
+        val rgb = java.awt.image.BufferedImage(rendered.width, rendered.height, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        rgb.createGraphics().apply { drawImage(rendered, 0, 0, java.awt.Color.BLACK, null); dispose() }
+        javax.imageio.ImageIO.write(rgb, "png", out)
+        println("RENDER $name ${exact.width}x${exact.height} RGB -> ${out.path}")
     }
 
     private fun repoRoot(): File {

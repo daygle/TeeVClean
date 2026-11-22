@@ -91,7 +91,13 @@ android {
             // Robolectric renders the real Compose tree for store screenshots, so it needs
             // the merged resources and native graphics (see ScreenshotRenderTest).
             isIncludeAndroidResources = true
-            all { it.systemProperty("robolectric.graphicsMode", "NATIVE") }
+            all {
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+                // Robolectric fetches its Android runtime jar from Maven while the tests run,
+                // which the CI runner's network does not allow. The renderer only exists to
+                // regenerate listing images locally, so CI skips it instead of failing.
+                if (System.getenv("CI") != null) it.exclude("**/ScreenshotRenderTest*")
+            }
         }
     }
 }
