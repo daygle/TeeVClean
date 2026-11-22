@@ -42,11 +42,11 @@ android {
         System.getenv(name)?.takeIf { it.isNotBlank() }
             ?: releaseSigningProps.getProperty(name)?.takeIf { it.isNotBlank() }
 
-    val releaseKeystorePath = releaseSigningValue("RELEASE_KEYSTORE_FILE")
-    val releaseKeystore = releaseKeystorePath?.let { rootProject.file(it) }
-    val releaseSigningConfigured = (releaseKeystore != null) && releaseKeystore.exists()
+    val releaseKeystore = releaseSigningValue("RELEASE_KEYSTORE_FILE")
+        ?.let { rootProject.file(it) }
+        ?.takeIf { it.exists() }
 
-    if (releaseKeystore != null && releaseKeystore.exists()) {
+    if (releaseKeystore != null) {
         signingConfigs.create("release") {
             storeFile = releaseKeystore
             storePassword = releaseSigningValue("RELEASE_KEYSTORE_PASSWORD")
@@ -66,7 +66,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            if (releaseSigningConfigured) {
+            if (releaseKeystore != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }

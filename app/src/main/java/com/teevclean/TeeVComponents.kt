@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -38,7 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -65,6 +68,10 @@ val Panel = Color(0xFF191E1A)
 val PanelLight = Color(0xFF232B25)
 val Lime = Color(0xFFB7F35B)
 val Muted = Color(0xFF9BA79C)
+val Warning = Color(0xFFFFB74D)
+
+/** Used share of storage above which TeeVClean warns about low space. */
+const val LOW_SPACE_FRACTION = 0.85f
 
 /**
  * The app's colours as a Material scheme. Screens set their colours directly, but dialogs take
@@ -91,8 +98,9 @@ fun TeeVTheme(content: @Composable () -> Unit) {
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
 fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) -> Unit) {
-    // Sub-screens without their own menu item land focus on the item they are reached from.
-    val focusTarget = when (selected) {
+    // Sub-screens without their own menu item highlight, and land focus on, the item they are
+    // reached from, so the menu always shows where the user is.
+    val menuItem = when (selected) {
         Screen.DUPLICATES -> Screen.CLEAN
         Screen.BREAKDOWN, Screen.HISTORY -> Screen.OVERVIEW
         else -> selected
@@ -115,9 +123,9 @@ fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) 
         Spacer(Modifier.height(32.dp))
         Screen.entries
             .filter { it != Screen.SETTINGS && it != Screen.DUPLICATES && it != Screen.BREAKDOWN && it != Screen.HISTORY }
-            .forEach { screen -> NavItem(screen, selected, onSelect, selectedFocus.takeIf { screen == focusTarget }) }
+            .forEach { screen -> NavItem(screen, menuItem, onSelect, selectedFocus.takeIf { screen == menuItem }) }
         Spacer(Modifier.weight(1f))
-        NavItem(Screen.SETTINGS, selected, onSelect, selectedFocus.takeIf { focusTarget == Screen.SETTINGS })
+        NavItem(Screen.SETTINGS, menuItem, onSelect, selectedFocus.takeIf { menuItem == Screen.SETTINGS })
         Text(stringResource(R.string.version_footer, BuildConfig.VERSION_NAME), color = Muted, fontSize = 13.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
     }
 }
@@ -210,8 +218,10 @@ fun ActionRow(title: String, subtitle: String, action: String, onClick: () -> Un
                 if (isFocused) Lime else Color.Transparent,
                 RoundedCornerShape(18.dp),
             )
-            .padding(22.dp)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+            // Clickable before padding, so the whole card is the click and focus target and
+            // D-pad scrolling brings all of it (border included) into view.
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -309,12 +319,12 @@ fun FeatureCard(
                 if (isFocused) Lime else Color.Transparent,
                 RoundedCornerShape(18.dp)
             )
-            .padding(20.dp)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
-            ),
+            )
+            .padding(20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF29352A)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = title, tint = Lime, modifier = Modifier.size(22.dp)) }
@@ -358,7 +368,7 @@ fun StorageCard(
                 TvButton(modifier = Modifier.focusRequester(cleanupButtonFocus), onClick = onClean) { Text(stringResource(R.string.review_cleanup)) }
             }
         }
-        Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > .85f) Color(0xFFFFB74D) else Lime)) }
+        Spacer(Modifier.height(20.dp)); Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF303930))) { Box(Modifier.fillMaxWidth(storage.fraction).fillMaxHeight().background(if (storage.fraction > LOW_SPACE_FRACTION) Warning else Lime)) }
 
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -385,15 +395,36 @@ fun SettingsScreen(
     customFolders: List<String>,
     /** Folders TeeVClean couldn't open; clean-up skips them until they are back. */
     missingFolders: Set<String>,
-    hasUsageAccess: Boolean,
-    hasStorageAccess: Boolean,
+    access: AccessState,
     appVersion: String,
     onEditSchedule: () -> Unit,
     onEnableUsage: () -> Unit,
     onEnableStorage: () -> Unit,
+    onEnableAllFiles: () -> Unit,
     onAddFolder: () -> Unit,
     onRemoveFolder: (String) -> Unit,
 ) {
+    // Removing a folder also gives up its access grant, so it is confirmed like a delete.
+    var pendingRemoval by remember { mutableStateOf<String?>(null) }
+    pendingRemoval?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            title = { Text(stringResource(R.string.confirm_remove_folder)) },
+            text = { Text(stringResource(R.string.confirm_remove_folder_desc, folderDisplayName(folder))) },
+            confirmButton = {
+                TvButton(onClick = {
+                    pendingRemoval = null
+                    onRemoveFolder(folder)
+                }) { Text(stringResource(R.string.remove_folder)) }
+            },
+            dismissButton = {
+                TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = { pendingRemoval = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     ScreenScaffold(stringResource(R.string.settings)) {
         ScreenList(spacing = 18.dp) {
             item {
@@ -418,39 +449,26 @@ fun SettingsScreen(
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).padding(20.dp)) {
                     Text(stringResource(R.string.settings_permissions), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.settings_usage_access), color = Color.White, fontSize = 15.sp)
-                            Text(
-                                if (hasUsageAccess) stringResource(R.string.settings_usage_access_granted)
-                                else stringResource(R.string.settings_usage_access_denied),
-                                color = if (hasUsageAccess) Lime else Color(0xFFFFB74D),
-                                fontSize = 13.sp
-                            )
-                        }
-                        TvButton(onClick = onEnableUsage) {
-                            Text(if (hasUsageAccess) stringResource(R.string.action_open) else stringResource(R.string.enable))
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.settings_usage_access_desc), color = Muted, fontSize = 13.sp)
+                    PermissionRow(
+                        stringResource(R.string.settings_usage_access),
+                        stringResource(R.string.settings_usage_access_desc),
+                        granted = access.usage,
+                        onClick = onEnableUsage,
+                    )
                     Spacer(Modifier.height(16.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.settings_storage_access), color = Color.White, fontSize = 15.sp)
-                            Text(
-                                if (hasStorageAccess) stringResource(R.string.settings_storage_access_granted)
-                                else stringResource(R.string.settings_storage_access_denied),
-                                color = if (hasStorageAccess) Lime else Color(0xFFFFB74D),
-                                fontSize = 13.sp
-                            )
-                        }
-                        TvButton(onClick = onEnableStorage) {
-                            Text(stringResource(R.string.action_open))
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.settings_storage_access_desc), color = Muted, fontSize = 13.sp)
+                    PermissionRow(
+                        stringResource(R.string.settings_storage_access),
+                        stringResource(R.string.settings_storage_access_desc),
+                        granted = access.folders,
+                        onClick = onEnableStorage,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    PermissionRow(
+                        stringResource(R.string.settings_all_files_access),
+                        stringResource(R.string.settings_all_files_access_desc),
+                        granted = access.allFiles,
+                        onClick = onEnableAllFiles,
+                    )
                 }
             }
             item {
@@ -483,13 +501,13 @@ fun SettingsScreen(
                                     .background(if (isFocused) PanelLight else Color.Transparent)
                                     .border(if (isFocused) 2.dp else 0.dp, if (isFocused) Lime else Color.Transparent, RoundedCornerShape(12.dp))
                                     .clickable(interactionSource = interactionSource, indication = null) {
-                                        onRemoveFolder(folder)
+                                        pendingRemoval = folder
                                     }
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Text("📁 $displayName", color = if (isFocused) Color.White else Muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (folder in missingFolders) {
-                                    Text(stringResource(R.string.folder_not_found), color = Color(0xFFFFB74D), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.folder_not_found), color = Warning, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     Spacer(Modifier.width(12.dp))
                                 }
                                 Text(stringResource(R.string.remove_folder), color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -521,6 +539,26 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+/** One special-access permission in Settings: its name and status, a button, then what it is for. */
+@Composable
+private fun PermissionRow(title: String, description: String, granted: Boolean, onClick: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(title, color = Color.White, fontSize = 15.sp)
+            Text(
+                stringResource(if (granted) R.string.status_granted else R.string.status_not_granted),
+                color = if (granted) Lime else Warning,
+                fontSize = 13.sp,
+            )
+        }
+        TvButton(onClick = onClick) {
+            Text(stringResource(if (granted) R.string.action_open else R.string.enable))
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(description, color = Muted, fontSize = 13.sp)
 }
 
 /**

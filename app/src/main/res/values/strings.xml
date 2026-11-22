@@ -17,6 +17,15 @@
         <item quantity="other">%1$d apps; review size and open Android app info</item>
     </plurals>
     <string name="feature_device_health_desc">Storage pressure, network, uptime and system details</string>
+    <string name="badge_storage">Storage</string>
+    <string name="badge_log">Log</string>
+    <string name="badge_files">Files</string>
+    <string name="badge_apps">Apps</string>
+    <string name="badge_health">Health</string>
+    <string name="card_view">View</string>
+    <string name="card_scan">Scan</string>
+    <string name="card_guided">Guided</string>
+    <string name="card_check">Check</string>
 
     <string name="privacy_title">Your Privacy Comes First</string>
     <string name="privacy_desc">No silent deletion and no fake RAM boosts. You approve every cleanup action.</string>
@@ -65,6 +74,17 @@
     <string name="android_version">Android Version</string>
     <string name="android_version_desc">Operating system version</string>
     <string name="device_model">Device</string>
+    <string name="percent_used">%1$d%% Used</string>
+    <string name="android_release">Android %1$s</string>
+    <plurals name="uptime_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="uptime_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <string name="uptime_days_hours">%1$s, %2$s</string>
     <string name="back_to_exit">Press back again to exit</string>
     <string name="thermal_disclaimer">Thermal readings vary by TV manufacturer and are not exposed on every device.</string>
 
@@ -81,7 +101,7 @@
     <string name="version_footer">TeeVClean  ·  v%1$s</string>
 
     <string name="scanning">Scanning…</string>
-    <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
+    <string name="storage_access_rationale">To scan for files, choose a folder for TeeVClean to scan, or allow storage access in Settings.</string>
     <string name="own_browser_title">Use TeeVClean\'s Own Browser</string>
     <string name="own_browser_desc">No folder was chosen. If this TV\'s folder picker isn\'t working, TeeVClean can browse your storage itself once you allow read and write access.</string>
     <string name="use_own_browser">Use Own Browser</string>
@@ -89,13 +109,13 @@
     <string name="settings_cleanup_schedule">Automatic Clean-up</string>
     <string name="settings_permissions">Application Permission</string>
     <string name="settings_usage_access">Usage Access</string>
-    <string name="settings_usage_access_granted">Granted</string>
-    <string name="settings_usage_access_denied">Not Granted</string>
+    <string name="status_granted">Granted</string>
+    <string name="status_not_granted">Not Granted</string>
     <string name="settings_usage_access_desc">Required to show when apps were last used and for the detailed storage breakdown.</string>
     <string name="settings_storage_access">Folder Access</string>
     <string name="settings_storage_access_desc">Required to scan custom folders for large and duplicate files.</string>
-    <string name="settings_storage_access_granted">Granted</string>
-    <string name="settings_storage_access_denied">Not Granted</string>
+    <string name="settings_all_files_access">All Files Access</string>
+    <string name="settings_all_files_access_desc">Required to sweep junk and trash across all storage, remove leftover installers anywhere, and clear every app\'s cache at once.</string>
     <string name="settings_scanned_folders">Custom Folders</string>
     <string name="settings_scanned_folders_desc">Folders added for downloads, media and duplicate scanning. Add the folders you want scanned here.</string>
     <string name="settings_no_folders">No custom folders added yet.</string>
@@ -135,7 +155,7 @@
     <string name="folder_browser_up">Up One Level</string>
     <string name="folder_browser_use">Use Folder</string>
     <string name="folder_browser_empty">No folders inside this one.</string>
-    <string name="feature_not_supported">System file picker missing. Opening settings to allow a full drive scan instead.</string>
+    <string name="all_files_settings_unavailable">This device doesn\'t offer the all-files access settings screen.</string>
     <string name="usage_settings_unavailable">This device doesn\'t offer a Usage Access settings screen.</string>
     <string name="storage_full_access_granted">Full storage access already enabled.</string>
     <plurals name="cleanup_freed">
@@ -157,6 +177,7 @@
 
     <string name="rarely_used_title">Rarely Used (90+ Days)</string>
     <string name="rarely_used_desc">Apps you haven\'t opened in over 3 months. Uninstall to reclaim space.</string>
+    <string name="not_used_recently">Not Used in 6 Months</string>
     <string name="all_apps_title">All Apps by Size</string>
     <string name="uninstall">Uninstall</string>
 
@@ -200,6 +221,8 @@
         <item quantity="other">Freed %1$s across %2$d items in total.</item>
     </plurals>
     <string name="remove_folder">Remove Folder</string>
+    <string name="confirm_remove_folder">Remove Folder?</string>
+    <string name="confirm_remove_folder_desc">%1$s will no longer be scanned or cleaned. Nothing inside it is deleted.</string>
     <string name="folder_not_found">Not Found</string>
     <string name="add_folder">Add Folder</string>
     <string name="folder_grant_failed">Android didn\'t allow lasting access to that folder. Please choose another one.</string>
@@ -217,6 +240,12 @@
     <string name="filter_show_installers">Include Installer APKs</string>
     <string name="filter_size_unit_mb">%1$d MB</string>
     <string name="filter_size_unit_gb">%1$d GB</string>
+    <string name="chip_min_size_mb">%1$d MB+</string>
+    <string name="chip_min_size_gb">%1$d GB+</string>
+    <plurals name="chip_min_age_days">
+        <item quantity="one">%1$d Day+</item>
+        <item quantity="other">%1$d Days+</item>
+    </plurals>
     <plurals name="filter_age_unit_days">
         <item quantity="one">%1$d Day</item>
         <item quantity="other">%1$d Days</item>

@@ -178,6 +178,13 @@ class TeeVViewModel(
     var fileFilter by mutableStateOf(repository.getFileFilter())
         private set
 
+    /**
+     * What TeeVClean may access, re-read on every refresh (which runs on each resume, so a grant
+     * made in Android's settings shows up on return) instead of on every recomposition.
+     */
+    var access by mutableStateOf(repository.readAccess())
+        private set
+
     private var refreshJob: Job? = null
 
     init {
@@ -192,15 +199,18 @@ class TeeVViewModel(
     fun refreshData() {
         refreshJob?.cancel()
         isRefreshing = true
+        access = repository.readAccess()
         refreshJob = viewModelScope.launch {
             try {
-                val storageDeferred = async { repository.readStorage() }
-                val appsDeferred = async { repository.loadApps() }
-                val filesDeferred = async { repository.scanLargeFiles() }
+                // Each part fails on its own: one broken source keeps its last value instead of
+                // crashing the app or blanking the others.
+                val storageDeferred = async { attempt { repository.readStorage() } }
+                val appsDeferred = async { attempt { repository.loadApps() } }
+                val filesDeferred = async { attempt { repository.scanLargeFiles() } }
 
-                storageSummary = storageDeferred.await()
-                apps = appsDeferred.await()
-                largeFiles = filesDeferred.await()
+                storageDeferred.await()?.let { storageSummary = it }
+                appsDeferred.await()?.let { apps = it }
+                filesDeferred.await()?.let { largeFiles = it }
                 cleanupHistory = repository.getCleanupHistory()
                 cleanupLog = repository.getCleanupLog()
                 lastAutomaticRun = repository.getLastAutomaticRun()
@@ -208,7 +218,7 @@ class TeeVViewModel(
                 cleanupFrequency = repository.getCleanupFrequency()
                 scheduleOptions = repository.getScheduleOptions()
                 customFolders = repository.getCustomFolders()
-                missingFolders = repository.unreachableFolders(customFolders)
+                attempt { repository.unreachableFolders(customFolders) }?.let { missingFolders = it }
             } finally {
                 // A superseded refresh must not clear the flag while its replacement is running.
                 if (refreshJob === coroutineContext[Job]) isRefreshing = false
@@ -221,7 +231,7 @@ class TeeVViewModel(
         isLoadingBreakdown = true
         viewModelScope.launch {
             try {
-                storageBreakdown = repository.storageBreakdown()
+                attempt { repository.storageBreakdown() }?.let { storageBreakdown = it }
             } finally {
                 isLoadingBreakdown = false
             }
@@ -282,7 +292,7 @@ class TeeVViewModel(
         isScanningDuplicates = true
         viewModelScope.launch {
             try {
-                duplicateGroups = repository.scanDuplicates()
+                attempt { repository.scanDuplicates() }?.let { duplicateGroups = it }
             } finally {
                 isScanningDuplicates = false
             }
@@ -363,11 +373,21 @@ class TeeVViewModel(
 
     fun openAppInfo(packageName: String) = repository.openAppInfo(packageName)
 
+    /** Checked live (not from [access]) for decisions made right after returning from a grant. */
     fun hasFullStorageAccess(): Boolean = repository.hasFullStorageAccess()
 
     fun updateFileFilter(filter: FileFilter) {
         repository.setFileFilter(filter)
         fileFilter = filter
         refreshData()
+    }
+
+    /** Runs [block], turning a failure (but not cancellation) into null. */
+    private suspend fun <T> attempt(block: suspend () -> T): T? = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 }

@@ -43,6 +43,7 @@ class TeeVViewModelTest {
         coEvery { repository.loadApps() } returns listOf(app)
         coEvery { repository.scanLargeFiles() } returns listOf(file)
         coEvery { repository.unreachableFolders(any()) } returns emptySet()
+        every { repository.readAccess() } returns AccessState()
     }
 
     @After
@@ -82,6 +83,29 @@ class TeeVViewModelTest {
         assertEquals(StorageSummary(40, 100), vm.storageSummary)
         assertEquals(listOf(app), vm.apps)
         assertEquals(listOf(file), vm.largeFiles)
+    }
+
+    @Test
+    fun `a failing source keeps the app running and the others still load`() {
+        coEvery { repository.loadApps() } throws IllegalStateException("package manager died")
+        val vm = viewModel()
+        vm.refreshData()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(vm.isRefreshing)
+        assertTrue(vm.apps.isEmpty())
+        assertEquals(StorageSummary(40, 100), vm.storageSummary)
+        assertEquals(listOf(file), vm.largeFiles)
+    }
+
+    @Test
+    fun `refresh re-reads granted access`() {
+        val vm = viewModel()
+        every { repository.readAccess() } returns AccessState(usage = true, allFiles = true, folders = true)
+
+        vm.refreshData()
+
+        assertEquals(AccessState(usage = true, allFiles = true, folders = true), vm.access)
     }
 
     @Test

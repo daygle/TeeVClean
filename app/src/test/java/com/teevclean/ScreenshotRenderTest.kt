@@ -18,7 +18,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -74,6 +73,9 @@ class ScreenshotRenderTest {
         every { repository.getScheduleMinuteOfDay() } returns 3 * 60
         every { repository.getFileFilter() } returns FileFilter()
         every { repository.hasFullStorageAccess() } returns true
+        // Usage access granted, so Applications shows real sizes and last-used dates (as it does
+        // for a user who enabled it) instead of the onboarding card.
+        every { repository.readAccess() } returns AccessState(usage = true, allFiles = true, folders = true)
         coEvery { repository.unreachableFolders(any()) } returns emptySet()
         coEvery { repository.readStorage() } returns
             StorageSummary(used = 26_400_000_000L, total = 34_359_738_368L)
@@ -96,22 +98,13 @@ class ScreenshotRenderTest {
             FileSummary("netflix-old.apk", "Download", 48L * mb, renderTime - TimeUnit.DAYS.toMillis(300), "content://docs/5", alreadyInstalled = true),
         )
 
-        // Usage access granted, so Applications shows real sizes and last-used dates (as it does
-        // for a user who enabled it) instead of the onboarding card.
-        val appOps = application.getSystemService(android.app.AppOpsManager::class.java)
-        shadowOf(appOps).setMode(
-            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-            android.os.Process.myUid(),
-            application.packageName,
-            android.app.AppOpsManager.MODE_ALLOWED,
-        )
-
         val viewModel = TeeVViewModel(application, repository)
         // A no-op prompt keeps the Android 11+ "All app caches" card in the Clean-up render.
         compose.setContent {
             TeeVCleanApp(
                 viewModel,
                 onRequestStorageAccess = {},
+                onRequestFullAccess = {},
                 onAddFolder = {},
                 onClearAllCaches = { _ -> },
                 now = { renderTime },
