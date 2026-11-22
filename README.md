@@ -10,15 +10,15 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 
 ## 🌟 Features
 
-- **Storage Health Dashboard**: Real-time summary of used and available space.
-- **Cleanup**: One-tap removal of TeeVClean's own cache (internal, external, and code cache), with a clear report of how much space was freed.
+- **Storage Health Dashboard**: Used, free and total space at a glance, refreshed whenever the app returns to the foreground and after every clean-up.
+- **Cleanup**: Clear TeeVClean's own cache (internal, external, and code cache) in one pass, with a clear report of how much space was freed.
 - **Junk Sweep**: Remove leftover temp, log, and thumbnail files plus empty folders from the folders you grant.
-- **Large File Review**: Scan folders you grant for oversized or stale files and delete them, with explicit per-file confirmation.
-- **Guided App Cache**: Deep-link into each app's storage page - the only store-legal way to clear another app's cache on modern Android.
-- **Applications**: Sort apps by size and quickly access system info for management.
-- **Device Health**: Monitor network connectivity, system uptime, and hardware details.
+- **Large File Review**: Review oversized, stale and installer files (including APKs of apps already installed) from the folders you grant and the top of Downloads, Movies and Pictures, then delete the ones you select after a single confirmation.
+- **Guided App Cache**: Open an app's system info screen, where its storage can be cleared - the only store-legal way to clear another app's cache on modern Android.
+- **Applications**: Sort apps by size and jump straight to an app's system info or uninstall prompt.
+- **Device Health**: Monitor storage pressure, network connectivity, system uptime, and hardware details.
 - **D-Pad Optimized**: Fully navigable via remote control with clear focus indicators.
-- **Privacy First**: No background deletions. Every action requires your explicit approval.
+- **Privacy First**: Everything stays on the device, and manual deletions are confirmed first. A cleanup schedule you enable also runs unattended, but only for the categories you tick (its own cache is always included).
 
 ---
 
