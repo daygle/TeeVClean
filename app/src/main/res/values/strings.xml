@@ -83,7 +83,7 @@
     <string name="scanning">Scanning…</string>
     <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
     <string name="own_browser_title">Use TeeVClean\'s Own Browser</string>
-    <string name="own_browser_desc">This TV has no working system folder picker. TeeVClean can browse your storage itself once you allow read and write access.</string>
+    <string name="own_browser_desc">No folder was chosen. If this TV\'s folder picker isn\'t working, TeeVClean can browse your storage itself once you allow read and write access.</string>
     <string name="use_own_browser">Use Own Browser</string>
 
     <string name="settings_cleanup_schedule">Automatic Clean-up</string>
