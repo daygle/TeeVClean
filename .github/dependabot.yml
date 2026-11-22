@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Gradle wrapper, the AGP/Kotlin plugins in build.gradle.kts, and the library
+  # versions in app/build.gradle.kts (including the Compose BOM).
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      androidx:
+        patterns:
+          - "androidx.*:*"
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*:*"
+
+  # Action versions pinned in .github/workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
