@@ -82,7 +82,9 @@
 
     <string name="scanning">Scanning…</string>
     <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
-    <string name="storage_access_rationale_legacy">Allow read and write access so TeeVClean can browse your storage with its own folder browser. That is the only way in on TVs with no system folder picker.</string>
+    <string name="own_browser_title">Use TeeVClean\'s Own Browser</string>
+    <string name="own_browser_desc">This TV has no working system folder picker. TeeVClean can browse your storage itself once you allow read and write access.</string>
+    <string name="use_own_browser">Use Own Browser</string>
 
     <string name="settings_cleanup_schedule">Automatic Clean-up</string>
     <string name="settings_permissions">Application Permission</string>
@@ -92,7 +94,6 @@
     <string name="settings_usage_access_desc">Required to show when apps were last used and for the detailed storage breakdown.</string>
     <string name="settings_storage_access">Folder Access</string>
     <string name="settings_storage_access_desc">Required to scan custom folders for large and duplicate files.</string>
-    <string name="settings_storage_access_desc_legacy">Required to scan folders for large and duplicate files. Allowing it also lets TeeVClean open its own folder browser on TVs with no system folder picker.</string>
     <string name="settings_storage_access_granted">Granted</string>
     <string name="settings_storage_access_denied">Not Granted</string>
     <string name="settings_scanned_folders">Custom Folders</string>

@@ -1,6 +1,5 @@
 package com.teevclean.app
 
-import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -451,14 +450,7 @@ fun SettingsScreen(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) R.string.settings_storage_access_desc_legacy
-                            else R.string.settings_storage_access_desc,
-                        ),
-                        color = Muted,
-                        fontSize = 13.sp,
-                    )
+                    Text(stringResource(R.string.settings_storage_access_desc), color = Muted, fontSize = 13.sp)
                 }
             }
             item {

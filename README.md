@@ -73,12 +73,13 @@ of its own into the built manifest, listed further down.
 | `PACKAGE_USAGE_STATS` | Optional. Reads each app's last-used time for the Applications list, and unlocks per-app size and cache figures from `StorageStatsManager` in Storage Breakdown. | Special access the user enables in system Settings; the Settings screen opens that page. Without it, last-used dates read as unknown and apps fall back to rough sizes. |
 | `MANAGE_EXTERNAL_STORAGE` | All files access: lets the built-in folder browser walk shared storage without a per-folder grant, and is required before Android will show its system-wide "clear all app caches" prompt. | Special access opened with `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` from the Settings screen, the folder-picker fallback or the cache-clear action. **Android 11+ only**; older TVs work from the folders you grant. |
 | `READ_EXTERNAL_STORAGE` | Fallback read access on Android 7-10 devices that ship no system folder picker; it is also what `hasFullStorageAccess()` checks below API 30. | Runtime prompt, launched only when the document picker is missing. |
-| `WRITE_EXTERNAL_STORAGE` | Lets TeeVClean delete the shared-storage files it lists on Android 7-10, where those deletions go through the legacy permissions. Capped with `android:maxSdkVersion="29"`, so it stops existing at API 30. | Requested together with read access whenever access is enabled on API 29 and below. Both grants are needed: with read access alone the app lists just the folders you grant, instead of offering files it cannot delete. |
+| `WRITE_EXTERNAL_STORAGE` | Lets TeeVClean delete the shared-storage files it lists on Android 7-10, where those deletions go through the legacy permissions. Capped with `android:maxSdkVersion="29"`, so it stops existing at API 30. | Only requested when you choose TeeVClean's own folder browser on API 29 and below; the system folder picker is always tried first. Both grants are needed: with read access alone the app lists just the folders you grant, instead of offering files it cannot delete. |
 
 `android:requestLegacyExternalStorage="true"` keeps Android 10 on the legacy storage model, so
-Android 7-10 behave alike: with read and write granted, the built-in folder browser works even on
-a TV that ships no system folder picker. Android 11+ ignores that flag for an app targeting 37 and
-uses all-files access instead.
+Android 7-10 behave alike. Picking a folder through the system picker stays the default on every
+version; TeeVClean only offers its own browser when that picker is missing or returns nothing,
+and that fallback asks for read and write access. Android 11+ ignores the flag for an app
+targeting 37 and uses all-files access instead.
 
 ### Folder grants
 

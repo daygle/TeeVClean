@@ -95,8 +95,22 @@ import java.util.concurrent.TimeUnit
 class MainActivity : ComponentActivity() {
     private val viewModel: TeeVViewModel by viewModels()
 
+    /** Offered when the system folder picker is missing or returns nothing on Android 7-10. */
+    private val offerOwnBrowser = mutableStateOf(false)
+
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri == null) return@registerForActivityResult
+        if (uri == null) {
+            // Either the user backed out or this TV's picker is a stub that returns nothing. Offer
+            // the in-app browser in the second case, but only while it would be the only way in
+            // (no folders yet, no direct access), so ordinary cancellations stay quiet.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+                !viewModel.hasFullStorageAccess() &&
+                viewModel.customFolders.isEmpty()
+            ) {
+                offerOwnBrowser.value = true
+            }
+            return@registerForActivityResult
+        }
         try {
             contentResolver.takePersistableUriPermission(
                 uri,
@@ -151,12 +165,9 @@ class MainActivity : ComponentActivity() {
                     onRequestStorageAccess = {
                         if (viewModel.hasFullStorageAccess()) {
                             Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
-                        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                            // Android 7-10: the read and write grants are what enable the built-in
-                            // browser, so ask for them rather than opening a folder picker this TV
-                            // may only stub out. The launcher opens the browser once they arrive.
-                            requestLegacyStorageAccess()
                         } else {
+                            // The system picker stays the default; the in-app browser is only offered
+                            // when that picker turns out to be missing or to return nothing.
                             pickFolder()
                         }
                     },
@@ -164,6 +175,15 @@ class MainActivity : ComponentActivity() {
                     onAddFolder = ::pickFolder,
                     onClearAllCaches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { then -> clearAllAppCaches(then) } else null,
                 )
+                if (offerOwnBrowser.value) {
+                    FolderBrowserFallbackDialog(
+                        onDismiss = { offerOwnBrowser.value = false },
+                        onUseOwnBrowser = {
+                            offerOwnBrowser.value = false
+                            requestLegacyStorageAccess()
+                        },
+                    )
+                }
             }
         }
     }
@@ -179,12 +199,13 @@ class MainActivity : ComponentActivity() {
         try {
             folderPicker.launch(null)
         } catch (_: ActivityNotFoundException) {
-            // No picker at all: ask for all-files access so the built-in browser can be used.
-            Toast.makeText(this, R.string.folder_picker_needs_access, Toast.LENGTH_LONG).show()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                openAllFilesAccessSettings()
+            // No picker at all. Android 7-10 can use the in-app browser straight away; Android 11+
+            // needs all-files access before it will open.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                offerOwnBrowser.value = true
             } else {
-                requestLegacyStorageAccess()
+                Toast.makeText(this, R.string.folder_picker_needs_access, Toast.LENGTH_LONG).show()
+                openAllFilesAccessSettings()
             }
         }
     }
@@ -450,10 +471,7 @@ fun TeeVCleanApp(
                             if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty() && !viewModel.hasFullStorageAccess()) {
                                 PermissionRationale(
                                     stringResource(R.string.large_files),
-                                    stringResource(
-                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) R.string.storage_access_rationale_legacy
-                                        else R.string.storage_access_rationale,
-                                    ),
+                                    stringResource(R.string.storage_access_rationale),
                                     onRequestStorageAccess,
                                     fallbackLabel = stringResource(R.string.settings),
                                     onFallback = { viewModel.currentScreen = Screen.SETTINGS }
@@ -1349,6 +1367,18 @@ private fun FolderRow(label: String, modifier: Modifier = Modifier, onClick: () 
 private fun ScheduleToggle(label: String, on: Boolean, available: Boolean, onFlip: () -> Unit) {
     val active = on && available
     SelectableChip(if (active) "✓  $label" else label, selected = active, enabled = available, onClick = onFlip)
+}
+
+/** Offered when a TV's system folder picker is missing or returns nothing on Android 7-10. */
+@Composable
+private fun FolderBrowserFallbackDialog(onDismiss: () -> Unit, onUseOwnBrowser: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.own_browser_title)) },
+        text = { Text(stringResource(R.string.own_browser_desc)) },
+        confirmButton = { TvButton(onClick = onUseOwnBrowser) { Text(stringResource(R.string.use_own_browser)) } },
+        dismissButton = { TvTextButton(modifier = Modifier.focusRequester(rememberInitialFocus()), onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 @Composable
