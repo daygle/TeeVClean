@@ -114,7 +114,9 @@ class ScreenshotRenderTest {
     }
 
     private fun repoRoot(): File {
-        val dir = File(System.getProperty("user.dir")).absoluteFile
+        // Gradle runs the test from the module directory; fall back to the current directory
+        // when the JVM property is unavailable.
+        val dir = File(System.getProperty("user.dir") ?: ".").absoluteFile
         return if (dir.name == "app") dir.parentFile else dir
     }
 }
