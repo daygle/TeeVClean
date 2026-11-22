@@ -102,10 +102,6 @@ and skipped by every scan.
 - `android:requestLegacyExternalStorage="true"` is set for Android 10, the only version that reads
   it, so that version keeps direct storage access without all-files access. Android 11+ ignores
   it for an app targeting 37.
-- The `<queries>` block names three provider authorities
-  (`com.android.textburrito.gdrive`, `com.android.externalstorage.photos`,
-  `com.android.backup.BackupTransportService`) that the manifest comment ties to Android 12+
-  backup and transfer. No Kotlin code queries them.
 - WorkManager adds `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and
   `FOREGROUND_SERVICE` to the built manifest so scheduled runs can wake the device and resume
   after a reboot. `ACCESS_NETWORK_STATE` is also what Device Health reads through
@@ -124,7 +120,7 @@ TeeVClean/
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml  # leanback entry point, permissions, backup rules
-│       │   ├── java/com/teevclean/app/
+│       │   ├── java/com/teevclean/
 │       │   │   ├── MainActivity.kt      # activity, picker/permission launchers, all screens
 │       │   │   ├── TeeVViewModel.kt     # UI state, Screen enum, actions to the repository
 │       │   │   ├── TeeVRepository.kt    # scans, deletions, stats, prefs, scheduling
@@ -137,15 +133,18 @@ TeeVClean/
 │       │       ├── drawable-{m,h,x}dpi/ # TV banner PNGs
 │       │       ├── values/              # strings.xml, styles.xml
 │       │       └── xml/                 # backup and data-extraction exclusions
-│       └── test/java/com/teevclean/app/
-│           ├── CleanupLogicTest.kt      # classifier, filter, log codec, timing rules (25)
-│           └── TeeVViewModelTest.kt     # view-model behaviour (10)
+│       └── test/java/com/teevclean/
+│           ├── CleanupLogicTest.kt      # classifier, filter, log codec, timing rules (24)
+│           ├── TeeVViewModelTest.kt     # view-model behaviour (10)
+│           └── ScreenshotRenderTest.kt  # headless Compose renderer for the Play screenshots
 ├── design/                          # brand SVGs and the visual-system notes
 ├── gradle/wrapper/                   # Gradle wrapper (9.9.2)
 ├── .github/workflows/               # android-ci.yml, release.yml
 ├── .github/dependabot.yml           # Gradle and Actions update PRs
 ├── build.gradle.kts                 # AGP and Kotlin plugin versions
 ├── settings.gradle.kts              # repositories and the :app module
+├── scripts/                         # device screenshot capture helper
+├── store-listing/                   # Play icon, feature graphic and rendered screenshots
 ├── RELEASING.md                     # signing, tagging and Play upload steps
 └── SECURITY.md                      # data-handling notes
 ```

@@ -32,8 +32,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -142,9 +144,7 @@ data class ScheduleOptions(
     val installedApks: Boolean = false,
     /** Media waiting in Android's trash (Android 11+, needs all-files access). */
     val trash: Boolean = false,
-) {
-    val extrasCount: Int get() = listOf(appCaches, sweepFolders, sweepDevice, installedApks, trash).count { it }
-}
+)
 
 /** A device-storage breakdown. [systemAndOtherBytes] is what used space isn't attributed to user apps. */
 data class StorageBreakdown(
@@ -234,7 +234,8 @@ data class FileFilter(
 
     fun isLarge(size: Long): Boolean = size >= minSize
 
-    fun isOld(modified: Long, now: Long): Boolean = modified < ageCutoff(now)
+    /** Only a known date can be old; a provider that reports none must not look ancient. */
+    fun isOld(modified: Long, now: Long): Boolean = modified > 0 && modified < ageCutoff(now)
 
     fun isListedInstaller(name: String?): Boolean = showInstallers && FileClassifier.isInstaller(name)
 
@@ -322,8 +323,9 @@ object FileClassifier {
 class TeeVRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("teevclean_prefs", Context.MODE_PRIVATE)
 
+    /** Sorted so the Settings list and every scan keep a stable order between loads. */
     fun getCustomFolders(): List<String> =
-        prefs.getStringSet(KEY_CUSTOM_FOLDERS, emptySet()).orEmpty().toList()
+        prefs.getStringSet(KEY_CUSTOM_FOLDERS, emptySet()).orEmpty().sorted()
 
     fun addCustomFolder(uri: String) {
         prefs.edit { putStringSet(KEY_CUSTOM_FOLDERS, getCustomFolders().toSet() + uri) }
@@ -381,7 +383,7 @@ class TeeVRepository(private val context: Context) {
             context,
             android.Manifest.permission.READ_EXTERNAL_STORAGE,
         ) == PackageManager.PERMISSION_GRANTED
-        val writeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.R && ContextCompat.checkSelfPermission(
+        val writeGranted = ContextCompat.checkSelfPermission(
             context,
             android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
         ) == PackageManager.PERMISSION_GRANTED
@@ -497,7 +499,8 @@ class TeeVRepository(private val context: Context) {
     /** The clean-up log, newest first. */
     fun getCleanupLog(): List<CleanupLogEntry> = CleanupLogCodec.decode(prefs.getString(KEY_CLEANUP_LOG, null))
 
-    /** Empties the log. The running totals are kept. */
+    /** Empties the log. The running totals are kept. Synchronized so a run finishing at the same moment can't write the cleared log back. */
+    @Synchronized
     fun clearCleanupLog() {
         prefs.edit { remove(KEY_CLEANUP_LOG) }
     }
@@ -523,10 +526,6 @@ class TeeVRepository(private val context: Context) {
     /** All of TeeVClean's own cache locations. externalCacheDir can be null when no media is mounted. */
     private fun ownCacheDirs(): List<File> =
         listOfNotNull(context.cacheDir, context.codeCacheDir, context.externalCacheDir)
-
-    suspend fun getCacheSize(): Long = withContext(Dispatchers.IO) {
-        ownCacheDirs().sumOf { folderSize(it) }
-    }
 
     suspend fun clearOwnCache(): CleanupResult = withContext(Dispatchers.IO) {
         var freed = 0L
@@ -827,8 +826,11 @@ class TeeVRepository(private val context: Context) {
             .filter { it.size > 1 }
             .flatten()
 
+        val fingerprintGate = Semaphore(FINGERPRINT_CONCURRENCY)
         val fingerprinted = coroutineScope {
-            sameSize.map { file -> async { fileFingerprint(file)?.let { (file.size to it) to file } } }.awaitAll()
+            sameSize.map { file ->
+                async { fingerprintGate.withPermit { fileFingerprint(file)?.let { (file.size to it) to file } } }
+            }.awaitAll()
         }
 
         fingerprinted
@@ -1261,5 +1263,8 @@ class TeeVRepository(private val context: Context) {
 
         /** Bytes hashed from each end of a file to fingerprint its content for duplicate detection. */
         private const val FINGERPRINT_BYTES = 1L * 1024 * 1024
+
+        /** Files hashed at once; a large duplicate set must not exhaust the process' file descriptors. */
+        private const val FINGERPRINT_CONCURRENCY = 4
     }
 }

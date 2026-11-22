@@ -42,7 +42,6 @@ class TeeVViewModelTest {
         coEvery { repository.readStorage() } returns StorageSummary(used = 40, total = 100)
         coEvery { repository.loadApps() } returns listOf(app)
         coEvery { repository.scanLargeFiles() } returns listOf(file)
-        coEvery { repository.getCacheSize() } returns 123L
         coEvery { repository.unreachableFolders(any()) } returns emptySet()
     }
 
@@ -72,7 +71,7 @@ class TeeVViewModelTest {
     }
 
     @Test
-    fun `refreshData loads storage apps files and cache`() {
+    fun `refreshData loads storage apps and files`() {
         val vm = viewModel()
         vm.refreshData()
         assertTrue(vm.isRefreshing)
@@ -83,7 +82,6 @@ class TeeVViewModelTest {
         assertEquals(StorageSummary(40, 100), vm.storageSummary)
         assertEquals(listOf(app), vm.apps)
         assertEquals(listOf(file), vm.largeFiles)
-        assertEquals(123L, vm.cacheSize)
     }
 
     @Test

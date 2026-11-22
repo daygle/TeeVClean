@@ -13,7 +13,7 @@ Currently, the latest release and the main branch are supported for security upd
 
 We take the security of TeeVClean seriously. If you believe you have found a security vulnerability, please do not report it via a public issue. Instead, please follow the steps below:
 
-1.  **Private Disclosure**: Please send a detailed report of the vulnerability to the project maintainers. (Note: Replace this with a specific email or contact method if available).
+1.  **Private Disclosure**: Please send a detailed report of the vulnerability to the project maintainers through a private channel, such as a GitHub security advisory on this repository, rather than a public issue.
 2.  **Information to Include**:
     *   Type of issue (e.g., buffer overflow, SQL injection, information disclosure).
     *   Location of the vulnerability (file, function, etc.).

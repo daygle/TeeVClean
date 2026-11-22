@@ -1,4 +1,4 @@
-name: Android CI & Release
+name: Android CI
 
 on:
   push:
@@ -26,14 +26,8 @@ jobs:
     - name: Grant Execute Permission for Gradlew
       run: chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
-
-    - name: Run Unit Tests
-      run: ./gradlew testDebugUnitTest
-
-    - name: Run Lint
-      run: ./gradlew lintDebug
+    - name: Build, test and lint
+      run: ./gradlew assembleDebug testDebugUnitTest lintDebug --console=plain
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7

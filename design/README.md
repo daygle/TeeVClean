@@ -11,8 +11,9 @@ launcher icon, banner, and running app all feel like one product.
 
 - `teevclean-brand.svg` - primary launcher mark, favicon source, and compact brand symbol.
 - `teevclean-banner.svg` - wide hero/banner artwork for product pages, store listings, and onboarding.
+- `teevclean-tv-banner.svg` - 16:9 artwork behind the in-app TV launcher banner PNGs.
 
-Both files are vector assets and can be exported to PNG at the target Android TV density or used
+All three are vector assets and can be exported to PNG at the target Android TV density or used
 as source artwork for the adaptive launcher icons in `app/src/main/res/drawable`.
 
 ## Palette

@@ -16,7 +16,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import org.robolectric.shadows.ShadowAppOpsManager
 import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.io.FileOutputStream
@@ -57,7 +56,6 @@ class ScreenshotRenderTest {
         coEvery { repository.unreachableFolders(any()) } returns emptySet()
         coEvery { repository.readStorage() } returns
             StorageSummary(used = 26_400_000_000L, total = 34_359_738_368L)
-        coEvery { repository.getCacheSize() } returns 512L * mb
         coEvery { repository.getNextScheduledRun(any()) } returns null
         coEvery { repository.loadApps() } returns listOf(
             AppSummary("Kodi", "org.xbmc.kodi", 1_640L * mb, now - TimeUnit.DAYS.toMillis(1)),

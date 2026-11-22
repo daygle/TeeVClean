@@ -86,6 +86,7 @@ class CleanupLogicTest {
         assertTrue(filter.matches("old.txt", size = 1, modified = now - 31 * day, now = now))
         assertTrue(filter.matches("app.apk", size = 1, modified = now, now = now))
         assertFalse(filter.matches("new.txt", size = 1, modified = now - 29 * day, now = now))
+        assertFalse("unknown date is not old", filter.matches("new.txt", size = 1, modified = 0, now = now))
         assertFalse(filter.copy(showInstallers = false).matches("app.apk", size = 1, modified = now, now = now))
     }
 
@@ -147,13 +148,6 @@ class CleanupLogicTest {
         assertTrue(FileClassifier.hasSettled(now - 25 * hour, now))
         assertFalse("still being written", FileClassifier.hasSettled(now - 1 * hour, now))
         assertFalse("unknown date is never settled", FileClassifier.hasSettled(0, now))
-    }
-
-    @Test
-    fun `schedule options count the opted-in extras`() {
-        assertEquals(0, ScheduleOptions().extrasCount)
-        assertEquals(2, ScheduleOptions(sweepDevice = true, trash = true).extrasCount)
-        assertEquals(5, ScheduleOptions(appCaches = true, sweepFolders = true, sweepDevice = true, installedApks = true, trash = true).extrasCount)
     }
 
     @Test

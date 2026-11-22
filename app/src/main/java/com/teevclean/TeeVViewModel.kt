@@ -156,8 +156,6 @@ class TeeVViewModel(
     /** Time of day scheduled clean-ups start, in minutes after midnight. */
     var scheduleMinuteOfDay by mutableIntStateOf(repository.getScheduleMinuteOfDay())
         private set
-    var cacheSize by mutableLongStateOf(0L)
-        private set
     var isRefreshing by mutableStateOf(false)
         private set
     var duplicateGroups by mutableStateOf(emptyList<DuplicateGroup>())
@@ -199,12 +197,10 @@ class TeeVViewModel(
                 val storageDeferred = async { repository.readStorage() }
                 val appsDeferred = async { repository.loadApps() }
                 val filesDeferred = async { repository.scanLargeFiles() }
-                val cacheDeferred = async { repository.getCacheSize() }
 
                 storageSummary = storageDeferred.await()
                 apps = appsDeferred.await()
                 largeFiles = filesDeferred.await()
-                cacheSize = cacheDeferred.await()
                 cleanupHistory = repository.getCleanupHistory()
                 cleanupLog = repository.getCleanupLog()
                 lastAutomaticRun = repository.getLastAutomaticRun()
