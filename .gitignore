@@ -31,3 +31,9 @@ Thumbs.db
 
 # Freebuff local metadata
 .freebuff/
+
+# Release signing (never commit)
+keystore.properties
+/keystore/
+*.keystore
+*.jks
