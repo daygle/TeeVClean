@@ -24,7 +24,7 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 
 ## 🛠 Tech Stack
 
-- **UI**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with [Compose for TV](https://developer.android.com/tv/compose)
+- **UI**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material 3, plus custom D-pad focus routing for the 10-foot experience (plain Compose — there is no Compose for TV dependency)
 - **Build System**: Gradle 9.9.2 with **AGP 9.5.2** (Built-in Kotlin Support)
 - **Language**: Kotlin 2.4+
 - **Architecture**: MVI-inspired UI state management
@@ -55,9 +55,9 @@ graph TD
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Android Studio Ladybug (or newer)
+- Android Studio 2026.2.2 "Rabbit 2" (or newer) — the oldest release that supports AGP 9.5
 - Android SDK 37.2
-- Java 21
+- JDK 21
 
 ### Build Instructions
 1. Clone the repository:
@@ -71,7 +71,11 @@ graph TD
    ```
 
 ### Installation
-TeeVClean is designed for **Android TV 11 (API 30)** and above. For the best experience, deploy to a physical TV or a TV emulator with landscape orientation.
+TeeVClean runs on **Android TV 7.0 (API 24)** and above, which is the `minSdk = 24` in
+`app/build.gradle.kts`. Two features need Android 11 (API 30) or newer: the all-files access
+settings page and Android's system-wide "clear all app caches" prompt. On older TVs those options
+are hidden and TeeVClean falls back to the folders you grant and each app's own storage settings.
+For the best experience, deploy to a physical TV or a TV emulator with landscape orientation.
 
 ---
 
