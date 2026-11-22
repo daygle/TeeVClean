@@ -30,7 +30,7 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 - **UI**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material 3, plus custom D-pad focus routing for the 10-foot experience (plain Compose — there is no Compose for TV dependency)
 - **Build System**: Gradle 9.9.2 with **AGP 9.5.2** (Built-in Kotlin Support)
 - **Language**: Kotlin 2.4+
-- **Architecture**: MVI-inspired UI state management
+- **Architecture**: MVVM — a single `AndroidViewModel` state holder over a repository, exposing Compose `mutableStateOf` state to the screens
 - **Background Tasks**: [WorkManager](https://developer.android.com/topic/libraries/architecture/workmanager) for scheduled cleanups
 
 ---
@@ -45,7 +45,12 @@ graph TD
     C --> E[Large Files]
     C --> F[Applications]
     C --> G[Device Health]
-    
+    C --> K[Settings]
+
+    B --> L[Storage Breakdown]
+    B --> M[Clean-up History]
+    D --> N[Duplicates]
+
     D --> H{User Approval}
     H -- Confirm --> I[Clear Cache]
     H -- Cancel --> D
@@ -68,7 +73,7 @@ graph TD
    git clone https://github.com/daygle/TeeVClean.git
    ```
 2. Open the project in Android Studio.
-3. Build and install the debug APK:
+3. Build the debug APK:
    ```bash
    ./gradlew assembleDebug
    ```
