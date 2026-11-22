@@ -632,7 +632,7 @@ class TeeVRepository(private val context: Context) {
                 // APKs are checked against installed apps even when the filter wouldn't list them,
                 // so a redundant installer always shows up under "Already installed".
                 val checked = if (FileClassifier.isApk(file.name)) {
-                    file.copy(alreadyInstalled = isInstalledApk(file))
+                    file.copy(alreadyInstalled = isInstalledApk(file, cached = true))
                 } else {
                     file
                 }
@@ -645,8 +645,10 @@ class TeeVRepository(private val context: Context) {
     private class ArchiveInfo(val packageName: String, val versionCode: Long)
 
     /**
-     * APK contents by uri, size and date. Parsing an APK is slow and every refresh checks every
-     * installer, so an unchanged file is only parsed once; null records "not a readable APK".
+     * APK contents by uri, size and date, for the Files listing only. Parsing an APK is slow and
+     * every refresh checks every installer, so an unchanged file is only parsed once; null records
+     * "not a readable APK". Files without a known date are never cached, since nothing would show
+     * that they changed.
      */
     private val archiveCache = HashMap<String, ArchiveInfo?>()
 
@@ -654,15 +656,22 @@ class TeeVRepository(private val context: Context) {
      * True when the APK [file] belongs to an app that is already installed at the same or a
      * newer version. The installed version is looked up fresh each time, so installing or
      * removing the app is picked up straight away. Any failure means "not known to be installed".
+     *
+     * [cached] allows answers from [archiveCache]. Deleting must never act on a stale answer (a
+     * provider can replace a document while keeping its uri, size and date), so callers that
+     * delete pass false and the APK is read again.
      */
-    private fun isInstalledApk(file: FileSummary): Boolean {
+    private fun isInstalledApk(file: FileSummary, cached: Boolean): Boolean {
         val key = "${file.uri}|${file.size}|${file.modified}"
-        val archive = synchronized(archiveCache) {
-            if (archiveCache.containsKey(key)) {
-                archiveCache[key]
-            } else {
-                if (archiveCache.size >= MAX_ARCHIVE_CACHE) archiveCache.clear()
-                readArchive(file.uri).also { archiveCache[key] = it }
+        val archive = when {
+            !cached || file.modified <= 0 -> readArchive(file.uri)
+            else -> synchronized(archiveCache) {
+                if (archiveCache.containsKey(key)) {
+                    archiveCache[key]
+                } else {
+                    if (archiveCache.size >= MAX_ARCHIVE_CACHE) archiveCache.clear()
+                    readArchive(file.uri).also { archiveCache[key] = it }
+                }
             }
         } ?: return false
         val installed = try {
@@ -1090,7 +1099,7 @@ class TeeVRepository(private val context: Context) {
      * from the same places the Files screen scans.
      */
     suspend fun removeInstalledApks(): CleanupResult = withContext(Dispatchers.IO) {
-        val redundant = scannableFiles().filter { FileClassifier.isApk(it.name) && isInstalledApk(it) }
+        val redundant = scannableFiles().filter { FileClassifier.isApk(it.name) && isInstalledApk(it, cached = false) }
         deleteFiles(redundant)
     }
 
