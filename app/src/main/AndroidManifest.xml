@@ -24,15 +24,18 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <!-- Fallback storage access for devices without all-files access or a usable folder picker:
-         shared storage is listed and deleted through the legacy permissions. WRITE stops at API 28,
-         after which scoped storage and MANAGE_EXTERNAL_STORAGE take over. -->
+         shared storage is listed and deleted through the legacy permissions. WRITE stops at API 29,
+         after which MANAGE_EXTERNAL_STORAGE takes over. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
 
-    <!-- Backups are off: saved folder Uris are only usable with grants that don't survive a restore. -->
+    <!-- Backups are off: saved folder Uris are only usable with grants that don't survive a restore.
+         Android 10 keeps the legacy storage model so the built-in folder browser still works on TVs
+         without a system folder picker; Android 11+ ignores this flag for an app targeting 37. -->
     <application
         android:allowBackup="false"
+        android:requestLegacyExternalStorage="true"
         android:fullBackupContent="@xml/full_backup_content"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/Theme.TeeVClean"

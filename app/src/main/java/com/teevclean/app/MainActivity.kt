@@ -133,6 +133,11 @@ class MainActivity : ComponentActivity() {
     private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted.values.any { it }) {
             viewModel.refreshData()
+            // On a TV with no system folder picker this grant is the only way into storage, so go
+            // straight to the built-in browser instead of asking the user to pick a folder again.
+            if (viewModel.hasFullStorageAccess()) {
+                viewModel.folderBrowserOpen = true
+            }
         }
     }
 
@@ -146,6 +151,11 @@ class MainActivity : ComponentActivity() {
                     onRequestStorageAccess = {
                         if (viewModel.hasFullStorageAccess()) {
                             Toast.makeText(this, R.string.storage_full_access_granted, Toast.LENGTH_SHORT).show()
+                        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                            // Android 7-10: the read and write grants are what enable the built-in
+                            // browser, so ask for them rather than opening a folder picker this TV
+                            // may only stub out. The launcher opens the browser once they arrive.
+                            requestLegacyStorageAccess()
                         } else {
                             pickFolder()
                         }
@@ -181,21 +191,18 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Without all-files access or a folder picker, shared storage is listed and deleted through
-     * the legacy permissions, so write access is asked for alongside read on API 28 and below.
-     * Both are needed: [TeeVRepository.hasFullStorageAccess] refuses to treat a read-only grant as
-     * full access, so files that could not be deleted are never offered. WRITE stops existing at
-     * API 29, so only read access is requested from there up.
+     * the legacy permissions, so write access is asked for alongside read. Both are needed:
+     * [TeeVRepository.hasFullStorageAccess] refuses to treat a read-only grant as full access, so
+     * files that could not be deleted are never offered. Only reached below API 30; Android 11+
+     * asks for all-files access instead.
      */
     private fun requestLegacyStorageAccess() {
-        val permissions = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+        storagePermissionLauncher.launch(
             arrayOf(
                 android.Manifest.permission.READ_EXTERNAL_STORAGE,
                 android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            )
-        } else {
-            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        storagePermissionLauncher.launch(permissions)
+            ),
+        )
     }
 
     /**
@@ -443,7 +450,10 @@ fun TeeVCleanApp(
                             if (viewModel.customFolders.isEmpty() && viewModel.largeFiles.isEmpty() && !viewModel.hasFullStorageAccess()) {
                                 PermissionRationale(
                                     stringResource(R.string.large_files),
-                                    stringResource(R.string.storage_access_rationale),
+                                    stringResource(
+                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) R.string.storage_access_rationale_legacy
+                                        else R.string.storage_access_rationale,
+                                    ),
                                     onRequestStorageAccess,
                                     fallbackLabel = stringResource(R.string.settings),
                                     onFallback = { viewModel.currentScreen = Screen.SETTINGS }

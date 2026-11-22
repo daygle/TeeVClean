@@ -82,6 +82,7 @@
 
     <string name="scanning">Scanning…</string>
     <string name="storage_access_rationale">To scan for files, please grant folder access in Application Permission, or choose a folder below.</string>
+    <string name="storage_access_rationale_legacy">Allow read and write access so TeeVClean can browse your storage with its own folder browser. That is the only way in on TVs with no system folder picker.</string>
 
     <string name="settings_cleanup_schedule">Automatic Clean-up</string>
     <string name="settings_permissions">Application Permission</string>
@@ -91,6 +92,7 @@
     <string name="settings_usage_access_desc">Required to show when apps were last used and for the detailed storage breakdown.</string>
     <string name="settings_storage_access">Folder Access</string>
     <string name="settings_storage_access_desc">Required to scan custom folders for large and duplicate files.</string>
+    <string name="settings_storage_access_desc_legacy">Required to scan folders for large and duplicate files. Allowing it also lets TeeVClean open its own folder browser on TVs with no system folder picker.</string>
     <string name="settings_storage_access_granted">Granted</string>
     <string name="settings_storage_access_denied">Not Granted</string>
     <string name="settings_scanned_folders">Custom Folders</string>
@@ -127,7 +129,7 @@
     <string name="cleanup_complete">Clean-up Complete</string>
     <string name="cleanup_nothing">Everything was already clean - nothing to remove.</string>
     <string name="done">Done</string>
-    <string name="folder_picker_needs_access">This TV has no system folder picker. Allow all files access for TeeVClean, then choose Add Folder again to pick one here.</string>
+    <string name="folder_picker_needs_access">This TV has no system folder picker, so TeeVClean will use its own folder browser. Grant storage access to continue.</string>
     <string name="folder_browser_title">Choose a Folder</string>
     <string name="folder_browser_up">Up One Level</string>
     <string name="folder_browser_use">Use Folder</string>

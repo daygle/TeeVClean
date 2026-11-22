@@ -367,10 +367,11 @@ class TeeVRepository(private val context: Context) {
 
     /**
      * True when TeeVClean can both read and delete shared storage without a per-folder grant:
-     * all-files access on Android 11+, or the legacy read and write pair on Android 7-9. Write
-     * access cannot be granted above API 28 and raw file access is impossible on Android 10
-     * under scoped storage, so those versions report false and work from the granted folders.
-     * Requiring the write grant keeps files that could not be deleted out of every listing.
+     * all-files access on Android 11+, or the legacy read and write pair on Android 7-10. Android
+     * 10 belongs to the legacy group because the manifest sets requestLegacyExternalStorage,
+     * which keeps that version on the pre-scoped model where WRITE_EXTERNAL_STORAGE is still
+     * grantable; Android 11+ ignores the flag and needs all-files access instead. Requiring the
+     * write grant keeps files that could not be deleted out of every listing.
      */
     fun hasFullStorageAccess(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -380,7 +381,7 @@ class TeeVRepository(private val context: Context) {
             context,
             android.Manifest.permission.READ_EXTERNAL_STORAGE,
         ) == PackageManager.PERMISSION_GRANTED
-        val writeGranted = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && ContextCompat.checkSelfPermission(
+        val writeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.R && ContextCompat.checkSelfPermission(
             context,
             android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
         ) == PackageManager.PERMISSION_GRANTED
