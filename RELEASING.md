@@ -12,7 +12,7 @@ values are read first from environment variables, then (for local builds) from a
 `keystore.properties` file in the project root, which is gitignored:
 
 ```properties
-RELEASE_KEYSTORE_FILE=keystore/teevclean-release.keystore   # absolute path, or relative to the project root
+RELEASE_KEYSTORE_FILE=keystore/release.jks   # absolute path, or relative to the project root
 RELEASE_KEYSTORE_PASSWORD=...
 RELEASE_KEY_ALIAS=teevclean
 RELEASE_KEY_PASSWORD=...
@@ -22,8 +22,8 @@ If there is no keystore yet, create one and keep it (and its passwords) backed u
 
 ```bash
 mkdir -p keystore
-keytool -genkeypair -v -keystore keystore/teevclean-release.keystore -alias teevclean \
-  -keyalg RSA -keysize 4096 -validity 10000
+keytool -genkeypair -v -keystore keystore/release.jks -alias teevclean \
+  -keyalg RSA -keysize 2048 -validity 10000
 ```
 
 `bundleRelease` then writes `app/build/outputs/bundle/release/app-release.aab`. Without a
@@ -35,7 +35,7 @@ To let CI build signed release bundles, add these repository secrets under
 
 | Secret | Value |
 | --- | --- |
-| `RELEASE_KEYSTORE_B64` | the keystore file, base64-encoded: `base64 -w0 keystore/teevclean-release.keystore` |
+| `RELEASE_KEYSTORE_B64` | the keystore file, base64-encoded: `base64 -w0 keystore/release.jks` |
 | `RELEASE_KEYSTORE_PASSWORD` | keystore password |
 | `RELEASE_KEY_ALIAS` | key alias |
 | `RELEASE_KEY_PASSWORD` | key password |
