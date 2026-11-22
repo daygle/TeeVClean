@@ -91,9 +91,9 @@ In Play Console order:
    - At least two TV screenshots at 1920 × 1080, captured from a TV device or emulator.
 6. **Sensitive permissions**: the manifest requests two permissions that each need a Play
    declaration form, or the upload/review is rejected:
-   - `QUERY_ALL_PACKAGES` — used to list installed apps with their sizes for the Applications
+   - `QUERY_ALL_PACKAGES` - used to list installed apps with their sizes for the Applications
      screen and Guided App Cache. Declare it as core functionality; no data leaves the device.
-   - `MANAGE_EXTERNAL_STORAGE` (All files access) — used for the Large Files, Duplicates and Junk
+   - `MANAGE_EXTERNAL_STORAGE` (All files access) - used for the Large Files, Duplicates and Junk
      Sweep tools. Play requires a justification and only allows it for core file-management
      functionality, which is why the internal-testing track is the right first step.
    - `PACKAGE_USAGE_STATS` is a user-granted special access (not a Play declaration) and is

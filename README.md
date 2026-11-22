@@ -27,10 +27,10 @@ A modern, privacy-first cleaning assistant for Android TV. TeeVClean is optimize
 
 ## 🛠 Tech Stack
 
-- **UI**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material 3, plus custom D-pad focus routing for the 10-foot experience (plain Compose — there is no Compose for TV dependency)
+- **UI**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material 3, plus custom D-pad focus routing for the 10-foot experience (plain Compose - there is no Compose for TV dependency)
 - **Build System**: Gradle 9.9.2 with **AGP 9.5.2** (Built-in Kotlin Support)
 - **Language**: Kotlin 2.4+
-- **Architecture**: MVVM — a single `AndroidViewModel` state holder over a repository, exposing Compose `mutableStateOf` state to the screens
+- **Architecture**: MVVM - a single `AndroidViewModel` state holder over a repository, exposing Compose `mutableStateOf` state to the screens
 - **Background Tasks**: [WorkManager](https://developer.android.com/topic/libraries/architecture/workmanager) for scheduled cleanups
 
 ---
@@ -171,7 +171,7 @@ Where things live:
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Android Studio 2026.2.2 "Rabbit 2" (or newer) — the oldest release that supports AGP 9.5
+- Android Studio 2026.2.2 "Rabbit 2" (or newer) - the oldest release that supports AGP 9.5
 - Android SDK 37.2
 - JDK 21
 
