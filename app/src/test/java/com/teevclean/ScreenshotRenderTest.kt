@@ -10,6 +10,8 @@ import androidx.test.core.app.ApplicationProvider
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -19,6 +21,11 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.io.FileOutputStream
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -34,10 +41,28 @@ class ScreenshotRenderTest {
     @get:Rule
     val compose = createComposeRule()
 
-    // Real clock: the listing should show dates close to the release, not a fixed past date.
-    private val now = System.currentTimeMillis()
+    // Fixed clock: listing images must not change with the wall clock. This instant matches the
+    // committed renders (Nov 20 run, Nov 21/22 usage dates).
+    private val clock = Clock.fixed(Instant.parse("2026-11-22T03:49:00Z"), ZoneOffset.UTC)
+    private val now = clock.millis()
     private val gb = 1024L * 1024 * 1024
     private val mb = 1024L * 1024
+
+    private val originalTimeZone = TimeZone.getDefault()
+    private val originalLocale = Locale.getDefault()
+
+    @Before
+    fun pinDateRendering() {
+        // DateFormat uses the JVM defaults, so pin them to keep renders identical everywhere.
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+        Locale.setDefault(Locale.US)
+    }
+
+    @After
+    fun restoreDateRendering() {
+        TimeZone.setDefault(originalTimeZone)
+        Locale.setDefault(originalLocale)
+    }
 
     @Test
     fun renderStoreScreens() {
@@ -87,7 +112,15 @@ class ScreenshotRenderTest {
 
         val viewModel = TeeVViewModel(application, repository)
         // A no-op prompt keeps the Android 11+ "All app caches" card in the Clean-up render.
-        compose.setContent { TeeVCleanApp(viewModel, onRequestStorageAccess = {}, onAddFolder = {}, onClearAllCaches = { _ -> }) }
+        compose.setContent {
+            TeeVCleanApp(
+                viewModel,
+                onRequestStorageAccess = {},
+                onAddFolder = {},
+                onClearAllCaches = { _ -> },
+                clock = clock,
+            )
+        }
         compose.waitForIdle()
 
         capture("overview", viewModel) { it.currentScreen = Screen.OVERVIEW }
