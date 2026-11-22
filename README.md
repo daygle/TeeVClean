@@ -62,9 +62,10 @@ graph TD
 
 ## 🔐 Permissions
 
-TeeVClean declares five permissions and no network permission (there is no `INTERNET` entry),
-so nothing it reads can be uploaded. All of them are in
-[`app/src/main/AndroidManifest.xml`](app/src/main/AndroidManifest.xml).
+TeeVClean declares four permissions of its own and no `INTERNET` permission, so nothing it reads
+can be uploaded. All four are in
+[`app/src/main/AndroidManifest.xml`](app/src/main/AndroidManifest.xml); WorkManager merges a few
+of its own into the built manifest, listed further down.
 
 | Permission | Why it is requested | How it is granted |
 | --- | --- | --- |
@@ -72,7 +73,6 @@ so nothing it reads can be uploaded. All of them are in
 | `PACKAGE_USAGE_STATS` | Optional. Reads each app's last-used time for the Applications list, and unlocks per-app size and cache figures from `StorageStatsManager` in Storage Breakdown. | Special access the user enables in system Settings; the Settings screen opens that page. Without it, last-used dates read as unknown and apps fall back to rough sizes. |
 | `MANAGE_EXTERNAL_STORAGE` | All files access: lets the built-in folder browser walk shared storage without a per-folder grant, and is required before Android will show its system-wide "clear all app caches" prompt. | Special access opened with `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` from the Settings screen, the folder-picker fallback or the cache-clear action. **Android 11+ only**; older TVs work from the folders you grant. |
 | `READ_EXTERNAL_STORAGE` | Fallback read access on Android 7-10 devices that ship no system folder picker; it is also what `hasFullStorageAccess()` checks below API 30. | Runtime prompt, launched only when the document picker is missing. |
-| `WRITE_EXTERNAL_STORAGE` | Legacy write access, capped with `android:maxSdkVersion="28"`. | No runtime request is made for it: deletions go through SAF folder grants or all-files access. |
 
 ### Folder grants
 
@@ -96,6 +96,11 @@ and skipped by every scan.
   (`com.android.textburrito.gdrive`, `com.android.externalstorage.photos`,
   `com.android.backup.BackupTransportService`) that the manifest comment ties to Android 12+
   backup and transfer. No Kotlin code queries them.
+- WorkManager adds `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and
+  `FOREGROUND_SERVICE` to the built manifest so scheduled runs can wake the device and resume
+  after a reboot. `ACCESS_NETWORK_STATE` is also what Device Health reads through
+  `ConnectivityManager`. None of them can move data off the device, because there is no
+  `INTERNET` permission to do it with.
 
 ---
 
