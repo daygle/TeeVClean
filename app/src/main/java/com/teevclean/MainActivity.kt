@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.key
 import java.io.File
-import java.time.Clock
 import android.os.Process
 import android.os.SystemClock
 import android.os.storage.StorageManager
@@ -287,8 +286,8 @@ fun TeeVCleanApp(
     onAddFolder: () -> Unit,
     /** Opens Android's clear-all-caches prompt (Android 11+), then runs the given continuation once it closes. */
     onClearAllCaches: ((then: () -> Unit) -> Unit)?,
-    /** Time source for age-based UI decisions; tests pass a fixed clock for stable renders. */
-    clock: Clock = Clock.systemUTC(),
+    /** Wall-clock time source for age-based UI decisions; tests pass a fixed value. */
+    now: () -> Long = System::currentTimeMillis,
 ) {
     var showCleanup by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
@@ -485,7 +484,7 @@ fun TeeVCleanApp(
                                     filter = viewModel.fileFilter,
                                     onUpdateFilter = { viewModel.updateFileFilter(it) },
                                     onDeleteMany = { selected -> viewModel.deleteFiles(selected) { result -> cleanupResult = result } },
-                                    clock = clock,
+                                    now = now,
                                 )
                             }
                         }
@@ -495,7 +494,7 @@ fun TeeVCleanApp(
                             onEnableUsage = { openUsageAccessSettings(context) },
                             onOpenInfo = { viewModel.openAppInfo(it) },
                             onUninstall = { viewModel.uninstallApp(it) },
-                            clock = clock,
+                            now = now,
                         )
                         Screen.DUPLICATES -> DuplicatesScreen(
                             groups = viewModel.duplicateGroups,
@@ -685,7 +684,7 @@ private fun LargeFilesScreen(
     filter: FileFilter,
     onUpdateFilter: (FileFilter) -> Unit,
     onDeleteMany: (List<FileSummary>) -> Unit,
-    clock: Clock = Clock.systemUTC(),
+    now: () -> Long = System::currentTimeMillis,
 ) {
     var activeFilters by remember { mutableStateOf(setOf(0, 1, 2, 3)) }
     var selected by remember { mutableStateOf(setOf<String>()) }
@@ -694,11 +693,11 @@ private fun LargeFilesScreen(
 
     val largeBytes = filter.minSize
 
-    val filteredFiles = remember(files, activeFilters, filter, clock) {
-        val now = clock.millis()
+    val filteredFiles = remember(files, activeFilters, filter) {
+        val nowMillis = now()
         files.filter { file ->
             (0 in activeFilters && filter.isLarge(file.size)) ||
-                (1 in activeFilters && filter.isOld(file.modified, now)) ||
+                (1 in activeFilters && filter.isOld(file.modified, nowMillis)) ||
                 (2 in activeFilters && filter.isListedInstaller(file.name)) ||
                 (3 in activeFilters && file.alreadyInstalled)
         }
@@ -805,10 +804,10 @@ private fun ApplicationsScreen(
     onEnableUsage: () -> Unit,
     onOpenInfo: (String) -> Unit,
     onUninstall: (String) -> Unit,
-    clock: Clock = Clock.systemUTC(),
+    now: () -> Long = System::currentTimeMillis,
 ) {
-    val rarelyUsed = remember(apps, clock) {
-        val cutoff = clock.millis() - TimeUnit.DAYS.toMillis(RARELY_USED_DAYS)
+    val rarelyUsed = remember(apps) {
+        val cutoff = now() - TimeUnit.DAYS.toMillis(RARELY_USED_DAYS)
         apps.filter { it.lastUsed in 1L until cutoff }.take(6)
     }
 

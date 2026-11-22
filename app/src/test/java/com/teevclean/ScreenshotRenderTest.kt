@@ -21,9 +21,6 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.io.FileOutputStream
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
@@ -41,10 +38,9 @@ class ScreenshotRenderTest {
     @get:Rule
     val compose = createComposeRule()
 
-    // Fixed clock: listing images must not change with the wall clock. This instant matches the
-    // committed renders (Nov 20 run, Nov 21/22 usage dates).
-    private val clock = Clock.fixed(Instant.parse("2026-11-22T03:49:00Z"), ZoneOffset.UTC)
-    private val now = clock.millis()
+    // Fixed render time: listing images must not change with the wall clock. 2026-11-22T03:49:00Z
+    // matches the committed renders (Nov 20 run, Nov 21/22 usage dates).
+    private val renderTime = 1_795_319_340_000L
     private val gb = 1024L * 1024 * 1024
     private val mb = 1024L * 1024
 
@@ -72,9 +68,9 @@ class ScreenshotRenderTest {
         every { repository.getCustomFolders() } returns emptyList()
         every { repository.getCleanupFrequency() } returns CleanupFrequency.WEEKLY
         every { repository.getScheduleOptions() } returns ScheduleOptions(sweepFolders = true, installedApks = true, trash = true)
-        every { repository.getCleanupHistory() } returns CleanupHistory(now - TimeUnit.DAYS.toMillis(2), 9_200_000_000L, 318)
+        every { repository.getCleanupHistory() } returns CleanupHistory(renderTime - TimeUnit.DAYS.toMillis(2), 9_200_000_000L, 318)
         every { repository.getCleanupLog() } returns emptyList()
-        every { repository.getLastAutomaticRun() } returns now - TimeUnit.DAYS.toMillis(2)
+        every { repository.getLastAutomaticRun() } returns renderTime - TimeUnit.DAYS.toMillis(2)
         every { repository.getScheduleMinuteOfDay() } returns 3 * 60
         every { repository.getFileFilter() } returns FileFilter()
         every { repository.hasFullStorageAccess() } returns true
@@ -83,21 +79,21 @@ class ScreenshotRenderTest {
             StorageSummary(used = 26_400_000_000L, total = 34_359_738_368L)
         coEvery { repository.getNextScheduledRun(any()) } returns null
         coEvery { repository.loadApps() } returns listOf(
-            AppSummary("Kodi", "org.xbmc.kodi", 1_640L * mb, now - TimeUnit.DAYS.toMillis(1)),
-            AppSummary("YouTube", "com.google.android.youtube.tv", 1_210L * mb, now - TimeUnit.HOURS.toMillis(2)),
-            AppSummary("Netflix", "com.netflix.ninja", 890L * mb, now - TimeUnit.HOURS.toMillis(5)),
-            AppSummary("Prime Video", "com.amazon.amazonvideo.livingroom", 640L * mb, now - TimeUnit.DAYS.toMillis(3)),
-            AppSummary("Disney+", "com.disney.disneyplus", 512L * mb, now - TimeUnit.DAYS.toMillis(100)),
-            AppSummary("Plex", "com.plexapp.android", 380L * mb, now - TimeUnit.DAYS.toMillis(140)),
-            AppSummary("Spotify", "com.spotify.tv.android", 210L * mb, now - TimeUnit.DAYS.toMillis(120)),
+            AppSummary("Kodi", "org.xbmc.kodi", 1_640L * mb, renderTime - TimeUnit.DAYS.toMillis(1)),
+            AppSummary("YouTube", "com.google.android.youtube.tv", 1_210L * mb, renderTime - TimeUnit.HOURS.toMillis(2)),
+            AppSummary("Netflix", "com.netflix.ninja", 890L * mb, renderTime - TimeUnit.HOURS.toMillis(5)),
+            AppSummary("Prime Video", "com.amazon.amazonvideo.livingroom", 640L * mb, renderTime - TimeUnit.DAYS.toMillis(3)),
+            AppSummary("Disney+", "com.disney.disneyplus", 512L * mb, renderTime - TimeUnit.DAYS.toMillis(100)),
+            AppSummary("Plex", "com.plexapp.android", 380L * mb, renderTime - TimeUnit.DAYS.toMillis(140)),
+            AppSummary("Spotify", "com.spotify.tv.android", 210L * mb, renderTime - TimeUnit.DAYS.toMillis(120)),
             AppSummary("VLC", "org.videolan.vlc", 96L * mb, 0L),
         )
         coEvery { repository.scanLargeFiles() } returns listOf(
-            FileSummary("Backup 2023.mkv", "Download", 4_100L * mb, now - TimeUnit.DAYS.toMillis(210), "content://docs/1"),
-            FileSummary("Holiday 2019.mp4", "Movies", 1_800L * mb, now - TimeUnit.DAYS.toMillis(420), "content://docs/2"),
-            FileSummary("screen-recording.mp4", "Pictures", 780L * mb, now - TimeUnit.DAYS.toMillis(45), "content://docs/3"),
-            FileSummary("kodi-20.5.apk", "Download", 92L * mb, now - TimeUnit.DAYS.toMillis(60), "content://docs/4"),
-            FileSummary("netflix-old.apk", "Download", 48L * mb, now - TimeUnit.DAYS.toMillis(300), "content://docs/5", alreadyInstalled = true),
+            FileSummary("Backup 2023.mkv", "Download", 4_100L * mb, renderTime - TimeUnit.DAYS.toMillis(210), "content://docs/1"),
+            FileSummary("Holiday 2019.mp4", "Movies", 1_800L * mb, renderTime - TimeUnit.DAYS.toMillis(420), "content://docs/2"),
+            FileSummary("screen-recording.mp4", "Pictures", 780L * mb, renderTime - TimeUnit.DAYS.toMillis(45), "content://docs/3"),
+            FileSummary("kodi-20.5.apk", "Download", 92L * mb, renderTime - TimeUnit.DAYS.toMillis(60), "content://docs/4"),
+            FileSummary("netflix-old.apk", "Download", 48L * mb, renderTime - TimeUnit.DAYS.toMillis(300), "content://docs/5", alreadyInstalled = true),
         )
 
         // Usage access granted, so Applications shows real sizes and last-used dates (as it does
@@ -118,7 +114,7 @@ class ScreenshotRenderTest {
                 onRequestStorageAccess = {},
                 onAddFolder = {},
                 onClearAllCaches = { _ -> },
-                clock = clock,
+                now = { renderTime },
             )
         }
         compose.waitForIdle()
