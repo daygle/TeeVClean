@@ -365,15 +365,26 @@ class TeeVRepository(private val context: Context) {
         false
     }
 
+    /**
+     * True when TeeVClean can both read and delete shared storage without a per-folder grant:
+     * all-files access on Android 11+, or the legacy read and write pair on Android 7-9. Write
+     * access cannot be granted above API 28 and raw file access is impossible on Android 10
+     * under scoped storage, so those versions report false and work from the granted folders.
+     * Requiring the write grant keeps files that could not be deleted out of every listing.
+     */
     fun hasFullStorageAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-            ) == PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return Environment.isExternalStorageManager()
         }
+        val readGranted = ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+        ) == PackageManager.PERMISSION_GRANTED
+        val writeGranted = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+        ) == PackageManager.PERMISSION_GRANTED
+        return readGranted && writeGranted
     }
 
     /** Total and available bytes of the data partition. */
@@ -537,12 +548,18 @@ class TeeVRepository(private val context: Context) {
      * Access Framework.
      */
     private fun scannableFiles(): List<FileSummary> {
-        val publicRoots = buildList {
-            add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
-            add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
-            add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
-            // With full storage access (legacy or MANAGE_EXTERNAL_STORAGE), include the storage root too.
-            if (hasFullStorageAccess()) add(Environment.getExternalStorageDirectory())
+        // Every listed file is offered for deletion, so the shared-storage roots are only walked
+        // when the app can really delete there: all-files access, or the legacy read+write pair.
+        // With read access alone they used to be listed and their deletion silently failed.
+        val publicRoots = if (hasFullStorageAccess()) {
+            buildList {
+                add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
+                add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
+                add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
+                add(Environment.getExternalStorageDirectory())
+            }
+        } else {
+            emptyList()
         }
 
         val publicFiles = publicRoots.distinct().flatMap { root ->
@@ -633,7 +650,11 @@ class TeeVRepository(private val context: Context) {
      */
     private fun walkSafTree(treeUriString: String, completeDirs: MutableSet<String>? = null): List<SafEntry> {
         val treeUri = treeUriString.toUri()
-        if (treeUri.scheme == "file") return walkFileTree(treeUri, completeDirs)
+        // Folders added with the built-in browser are plain paths rather than SAF trees, so they
+        // are only walked while direct access covers deletion too.
+        if (treeUri.scheme == "file") {
+            return if (hasFullStorageAccess()) walkFileTree(treeUri, completeDirs) else emptyList()
+        }
         val rootId = try {
             DocumentsContract.getTreeDocumentId(treeUri)
         } catch (_: Exception) {

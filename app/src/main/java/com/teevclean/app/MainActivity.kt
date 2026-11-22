@@ -130,8 +130,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
+    private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.any { it }) {
             viewModel.refreshData()
         }
     }
@@ -174,9 +174,28 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 openAllFilesAccessSettings()
             } else {
-                storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                requestLegacyStorageAccess()
             }
         }
+    }
+
+    /**
+     * Without all-files access or a folder picker, shared storage is listed and deleted through
+     * the legacy permissions, so write access is asked for alongside read on API 28 and below.
+     * Both are needed: [TeeVRepository.hasFullStorageAccess] refuses to treat a read-only grant as
+     * full access, so files that could not be deleted are never offered. WRITE stops existing at
+     * API 29, so only read access is requested from there up.
+     */
+    private fun requestLegacyStorageAccess() {
+        val permissions = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            arrayOf(
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            )
+        } else {
+            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        storagePermissionLauncher.launch(permissions)
     }
 
     /**

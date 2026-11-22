@@ -62,8 +62,8 @@ graph TD
 
 ## 🔐 Permissions
 
-TeeVClean declares four permissions of its own and no `INTERNET` permission, so nothing it reads
-can be uploaded. All four are in
+TeeVClean declares five permissions of its own and no `INTERNET` permission, so nothing it reads
+can be uploaded. All five are in
 [`app/src/main/AndroidManifest.xml`](app/src/main/AndroidManifest.xml); WorkManager merges a few
 of its own into the built manifest, listed further down.
 
@@ -73,6 +73,11 @@ of its own into the built manifest, listed further down.
 | `PACKAGE_USAGE_STATS` | Optional. Reads each app's last-used time for the Applications list, and unlocks per-app size and cache figures from `StorageStatsManager` in Storage Breakdown. | Special access the user enables in system Settings; the Settings screen opens that page. Without it, last-used dates read as unknown and apps fall back to rough sizes. |
 | `MANAGE_EXTERNAL_STORAGE` | All files access: lets the built-in folder browser walk shared storage without a per-folder grant, and is required before Android will show its system-wide "clear all app caches" prompt. | Special access opened with `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` from the Settings screen, the folder-picker fallback or the cache-clear action. **Android 11+ only**; older TVs work from the folders you grant. |
 | `READ_EXTERNAL_STORAGE` | Fallback read access on Android 7-10 devices that ship no system folder picker; it is also what `hasFullStorageAccess()` checks below API 30. | Runtime prompt, launched only when the document picker is missing. |
+| `WRITE_EXTERNAL_STORAGE` | Lets TeeVClean delete the shared-storage files it lists on Android 7-9, where those deletions go through the legacy permissions. Capped with `android:maxSdkVersion="28"`, so it stops existing at API 29. | Requested together with read access on the no-picker fallback path, on API 28 and below only. Both grants are needed: with read access alone the app lists just the folders you grant, instead of offering files it cannot delete. |
+
+Android 10 (API 29) has no direct file access at all: all-files access starts at 11, and the
+legacy write grant stops at 28, so on that version TeeVClean only ever works from the folders
+you grant.
 
 ### Folder grants
 

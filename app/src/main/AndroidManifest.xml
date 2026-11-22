@@ -23,9 +23,11 @@
     <!-- User-granted special access used to display optional last-used app data. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
-    <!-- Fallback read access for devices where SAF is missing or limited. Writes and deletes go
-         through the SAF grants the user gives or through all-files access, never a write permission. -->
+    <!-- Fallback storage access for devices without all-files access or a usable folder picker:
+         shared storage is listed and deleted through the legacy permissions. WRITE stops at API 28,
+         after which scoped storage and MANAGE_EXTERNAL_STORAGE take over. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
 
     <!-- Backups are off: saved folder Uris are only usable with grants that don't survive a restore. -->
