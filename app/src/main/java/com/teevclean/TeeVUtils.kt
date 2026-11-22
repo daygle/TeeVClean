@@ -1,4 +1,4 @@
-package com.teevclean.app
+package com.teevclean
 
 import java.util.Locale
 

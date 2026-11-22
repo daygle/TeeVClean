@@ -1,4 +1,4 @@
-package com.teevclean.app
+package com.teevclean
 
 import android.app.Application
 import androidx.compose.runtime.getValue

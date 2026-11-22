@@ -1,4 +1,4 @@
-package com.teevclean.app
+package com.teevclean
 
 import android.app.usage.StorageStatsManager
 import android.app.usage.UsageStatsManager

@@ -1,4 +1,4 @@
-package com.teevclean.app
+package com.teevclean
 
 import android.app.AppOpsManager
 import android.content.ActivityNotFoundException

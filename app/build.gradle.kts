@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.teevclean.app"
+    namespace = "com.teevclean"
     compileSdk {
         version = release(37) { minorApiLevel = 2 }
     }
@@ -21,7 +21,7 @@ android {
         ?: 1
 
     defaultConfig {
-        applicationId = "com.teevclean.app"
+        applicationId = "com.teevclean"
         minSdk = 24
         targetSdk = 37
         versionCode = buildVersionCode

@@ -1,4 +1,4 @@
-package com.teevclean.app
+package com.teevclean
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background

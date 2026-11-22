@@ -74,7 +74,7 @@ first upload is done by hand in Play Console (exactly as for PackaTrack and the 
 In Play Console order:
 
 1. **Create the app**: name `TeeVClean`, default language English, type *App*, *Free*.
-2. **Package name** `com.teevclean.app` (the `applicationId`; the Kotlin namespace is the same).
+2. **Package name** `com.teevclean` (the `applicationId`; the Kotlin namespace is the same).
    This is permanent and cannot be changed after the first upload.
 3. **Play App Signing**: opt in on the first upload. Play then holds the app signing key and the
    keystore configured above becomes the *upload* key. Never upload with a debug keystore.

@@ -1,4 +1,4 @@
-package com.teevclean.app
+package com.teevclean
 
 import android.content.Context
 import android.util.Log
