@@ -105,7 +105,7 @@ fun Sidebar(selected: Screen, selectedFocus: FocusRequester, onSelect: (Screen) 
             // whichever item happens to be nearest. Redirecting here, instead of calling
             // requestFocus from onFocusChanged mid-move, keeps the move from being cancelled
             // and focus snapping back into the content.
-            .focusProperties { enter = { selectedFocus } }
+            .focusProperties { onEnter = { selectedFocus.requestFocus() } }
             .focusGroup()
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

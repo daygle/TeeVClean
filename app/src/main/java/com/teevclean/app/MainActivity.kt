@@ -395,8 +395,8 @@ fun TeeVCleanApp(
                         // Cancel that move and request the content instead, which enters it at
                         // its first item.
                         .focusProperties {
-                            enter = { direction ->
-                                if (direction == FocusDirection.Right) {
+                            onEnter = {
+                                if (requestedFocusDirection == FocusDirection.Right) {
                                     if (viewModel.currentScreen == Screen.OVERVIEW) {
                                         scope.launch {
                                             withFrameNanos { }
@@ -405,9 +405,7 @@ fun TeeVCleanApp(
                                     } else {
                                         restoreFocusToContentTop()
                                     }
-                                    FocusRequester.Cancel
-                                } else {
-                                    FocusRequester.Default
+                                    cancelFocusChange()
                                 }
                             }
                         }
