@@ -60,6 +60,100 @@ graph TD
 
 ---
 
+## 🔐 Permissions
+
+TeeVClean declares five permissions and no network permission (there is no `INTERNET` entry),
+so nothing it reads can be uploaded. All of them are in
+[`app/src/main/AndroidManifest.xml`](app/src/main/AndroidManifest.xml).
+
+| Permission | Why it is requested | How it is granted |
+| --- | --- | --- |
+| `QUERY_ALL_PACKAGES` | Lists installed apps with their names and sizes for Applications, Storage Breakdown and Guided App Cache, and checks whether an APK on disk belongs to an app that is already installed. | Granted at install time. Google Play requires a declaration form for it. |
+| `PACKAGE_USAGE_STATS` | Optional. Reads each app's last-used time for the Applications list, and unlocks per-app size and cache figures from `StorageStatsManager` in Storage Breakdown. | Special access the user enables in system Settings; the Settings screen opens that page. Without it, last-used dates read as unknown and apps fall back to rough sizes. |
+| `MANAGE_EXTERNAL_STORAGE` | All files access: lets the built-in folder browser walk shared storage without a per-folder grant, and is required before Android will show its system-wide "clear all app caches" prompt. | Special access opened with `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION` from the Settings screen, the folder-picker fallback or the cache-clear action. **Android 11+ only**; older TVs work from the folders you grant. |
+| `READ_EXTERNAL_STORAGE` | Fallback read access on Android 7-10 devices that ship no system folder picker; it is also what `hasFullStorageAccess()` checks below API 30. | Runtime prompt, launched only when the document picker is missing. |
+| `WRITE_EXTERNAL_STORAGE` | Legacy write access, capped with `android:maxSdkVersion="28"`. | No runtime request is made for it: deletions go through SAF folder grants or all-files access. |
+
+### Folder grants
+
+The folders you add are SAF grants rather than permissions. TeeVClean opens the system folder
+picker (`ActivityResultContracts.OpenDocumentTree`) and keeps the grant with
+`takePersistableUriPermission`, so it survives reboots until you remove the folder in Settings
+or the grant is revoked. A picker that offers no persistable grant is rejected with a message
+instead of failing silently later. Folders that can no longer be opened are flagged in Settings
+and skipped by every scan.
+
+### Declared capabilities
+
+- `android.software.leanback` is **required**, and the only launcher entry point is
+  `LEANBACK_LAUNCHER`, so TeeVClean installs as a TV app and has no phone launcher entry.
+- Touchscreen, fake touch, telephony, camera, NFC, GPS and microphone are all declared **not
+  required**, so a TV or box without them still installs.
+- `android:allowBackup="false"`, and the data-extraction rules in `res/xml` exclude every domain
+  from cloud backup and device transfer, so folder grants, the schedule and clean-up history
+  never leave the device.
+- The `<queries>` block names three provider authorities
+  (`com.android.textburrito.gdrive`, `com.android.externalstorage.photos`,
+  `com.android.backup.BackupTransportService`) that the manifest comment ties to Android 12+
+  backup and transfer. No Kotlin code queries them.
+
+---
+
+## 📁 Project Structure
+
+```text
+TeeVClean/
+├── app/
+│   ├── build.gradle.kts             # SDK levels, versioning, signing, R8, dependencies
+│   ├── proguard-rules.pro           # keep rules used by the release build
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml  # leanback entry point, permissions, backup rules
+│       │   ├── java/com/teevclean/app/
+│       │   │   ├── MainActivity.kt      # activity, picker/permission launchers, all screens
+│       │   │   ├── TeeVViewModel.kt     # UI state, Screen enum, actions to the repository
+│       │   │   ├── TeeVRepository.kt    # scans, deletions, stats, prefs, scheduling
+│       │   │   ├── TeeVComponents.kt    # theme, sidebar, cards, dialogs, focus helpers
+│       │   │   ├── CleanupWorker.kt     # WorkManager job behind scheduled clean-ups
+│       │   │   └── TeeVUtils.kt         # byte and duration formatting
+│       │   └── res/
+│       │       ├── drawable/            # adaptive launcher icon layers
+│       │       ├── drawable-v26/        # adaptive icon for API 26+
+│       │       ├── drawable-{m,h,x}dpi/ # TV banner PNGs
+│       │       ├── values/              # strings.xml, styles.xml
+│       │       └── xml/                 # backup and data-extraction exclusions
+│       └── test/java/com/teevclean/app/
+│           ├── CleanupLogicTest.kt      # classifier, filter, log codec, timing rules (25)
+│           └── TeeVViewModelTest.kt     # view-model behaviour (10)
+├── design/                          # brand SVGs and the visual-system notes
+├── gradle/wrapper/                   # Gradle wrapper (9.9.2)
+├── .github/workflows/               # android-ci.yml, release.yml
+├── .github/dependabot.yml           # Gradle and Actions update PRs
+├── build.gradle.kts                 # AGP and Kotlin plugin versions
+├── settings.gradle.kts              # repositories and the :app module
+├── RELEASING.md                     # signing, tagging and Play upload steps
+└── SECURITY.md                      # data-handling notes
+```
+
+Where things live:
+
+- **Screens and routing**: every screen is an entry in the `Screen` enum in `TeeVViewModel.kt`,
+  and `TeeVCleanApp` in `MainActivity.kt` switches on `viewModel.currentScreen`. The sidebar
+  lists Overview, Cleanup, Large Files, Applications and Device Health and pins Settings at the
+  bottom; Storage Breakdown and Clean-up History open from Overview cards, and Duplicates opens
+  from Cleanup.
+- **Device work**: all file, package and storage reads in `TeeVRepository.kt`, on
+  `Dispatchers.IO`. The view model holds state with `mutableStateOf` and forwards user actions.
+- **Scheduled clean-ups**: `CleanupWorker` runs only the unattended-safe categories, records one
+  history entry per run (including stopped or failed runs) and reschedules through the unique
+  periodic work named `CLEANUP_WORK`.
+- **Stored state**: a single `SharedPreferences` file, `teevclean_prefs`, holds the folder list,
+  schedule, file filter and the clean-up log (capped at the last 50 entries). There is no database.
+- **Copy**: user-facing text lives in `res/values/strings.xml`, with a few short labels still
+  written inline in the Compose screens.
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
