@@ -59,12 +59,14 @@ release, in order, so a beta or release candidate uploaded to Play never blocks 
 
 | Tag suffix | STAGE | Example | versionCode |
 | --- | --- | --- | --- |
-| `-alpha.N` (N 0-32; `-alpha` = 0) | N | `v1.1.0-alpha.1` | `100100001` |
+| `-alpha.N` (N 0-32) | N | `v1.1.0-alpha.1` | `100100001` |
 | `-beta.N` | 33 + N | `v1.1.0-beta.2` | `100100035` |
 | `-rc.N` | 66 + N | `v1.1.0-rc.1` | `100100067` |
 | none (final) | 99 | `v1.1.0` | `100100099` |
 
-MAJOR goes up to 20 and MINOR and PATCH up to 999; any other tag shape fails the workflow. Codes
+MAJOR goes up to 20 and MINOR and PATCH up to 999. The pre-release number is required and no number
+may have a leading zero, so no two tags can share a `versionCode`; any other tag shape fails the
+workflow. Codes
 from this scheme are all higher than the earlier one's (`v1.0.0` was `1000000`), so updates install
 over releases built before the change.
 
