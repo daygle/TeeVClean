@@ -22,10 +22,9 @@ jobs:
     timeout-minutes: 30
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v7
-
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Set up JDK 21
-      uses: actions/setup-java@v6
+      uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
       with:
         java-version: '21'
         distribution: 'temurin'
@@ -33,15 +32,14 @@ jobs:
     # Caches Gradle state between runs (written from main, read by pull requests) and verifies
     # gradle-wrapper.jar against Gradle's published checksums before anything runs it.
     - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v6
-
+      uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
     # The same checks the release workflow gates on (release lint, no Gradle warnings), so a
     # problem shows up on the pull request rather than when a version is tagged.
     - name: Build, test and lint
       run: ./gradlew assembleDebug testDebugUnitTest lintDebug lintRelease --warning-mode=fail --console=plain
 
     - name: Upload Debug APK
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: TeeVClean-Debug-APK
         path: app/build/outputs/apk/debug/app-debug.apk
@@ -50,7 +48,7 @@ jobs:
 
     - name: Upload Build Reports
       if: always()
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: TeeVClean-Reports
         path: |

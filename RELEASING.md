@@ -51,8 +51,22 @@ To let CI build signed release bundles, add these repository secrets under
 
 Pushing a `vMAJOR.MINOR.PATCH` tag (e.g. `v1.0.0`, or `v1.1.0-beta.1` for a pre-release) runs lint
 and the unit tests, then publishes a signed **App Bundle** as `TeeVClean-<version>-release.aab`
-to GitHub Releases. The `versionCode` is derived from the tag (`v1.0.0` → `1000000`) so it always
-increases; the workflow fails rather than publishing an unsigned bundle or reusing a version.
+to GitHub Releases. The workflow fails rather than publishing an unsigned bundle.
+
+The `versionCode` is derived from the tag, so it always increases:
+`MAJOR × 10⁸ + MINOR × 10⁵ + PATCH × 10² + STAGE`. STAGE places pre-releases below their final
+release, in order, so a beta or release candidate uploaded to Play never blocks the final:
+
+| Tag suffix | STAGE | Example | versionCode |
+| --- | --- | --- | --- |
+| `-alpha.N` (N 0-32; `-alpha` = 0) | N | `v1.1.0-alpha.1` | `100100001` |
+| `-beta.N` | 33 + N | `v1.1.0-beta.2` | `100100035` |
+| `-rc.N` | 66 + N | `v1.1.0-rc.1` | `100100067` |
+| none (final) | 99 | `v1.1.0` | `100100099` |
+
+MAJOR goes up to 20 and MINOR and PATCH up to 999; any other tag shape fails the workflow. Codes
+from this scheme are all higher than the earlier one's (`v1.0.0` was `1000000`), so updates install
+over releases built before the change.
 
 ```bash
 git tag v1.0.0
