@@ -44,11 +44,12 @@ jobs:
           packages: platform-tools
 
       # versionCode must increase with every release, so it is derived from the tag rather than
-      # the run number: MAJOR*10^8 + MINOR*10^5 + PATCH*10^2 + STAGE. STAGE puts pre-releases
+      # the run number: (MAJOR*10^4 + MINOR*10^2 + PATCH)*100 + STAGE. STAGE puts pre-releases
       # below their final release, in SemVer order, so a beta uploaded to Play never blocks the
       # final: alpha.N = N, beta.N = 33+N, rc.N = 66+N (N from 0 to 32, always given), final = 99.
-      # v1.0.0 -> 100000099, v1.1.0-beta.2 -> 100100035. Every code is above the earlier scheme's
-      # (v1.0.0 was 1000000), so updates over a release made with it still install.
+      # v1.0.1 -> 1000199, v1.1.0-beta.2 -> 1010035. Codes stay just above the earlier scheme's
+      # (v1.0.0 was 1000000) and grow by 100 per patch release, so they use up Google Play's
+      # 2,100,000,000 range slowly, as Play requires.
       - name: Extract version from tag
         env:
           TAG: ${{ github.ref_name }}
@@ -57,15 +58,15 @@ jobs:
           # Numbers have no leading zeros (as in SemVer) and the pre-release number is required, so
           # no two tags share a versionCode (v1.0.0-beta and -beta.0, or v01.0.0 and v1.0.0, would).
           # Capping the digit counts also keeps the arithmetic below from overflowing.
-          NUM2='(0|[1-9][0-9]?)'; NUM3='(0|[1-9][0-9]{0,2})'
-          if [[ ! "$VERSION" =~ ^${NUM2}\.${NUM3}\.${NUM3}(-(alpha|beta|rc)\.${NUM2})?$ ]]; then
-            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH, optionally followed by -alpha.N, -beta.N or -rc.N (no leading zeros)"
+          NUM2='(0|[1-9][0-9]?)'; NUM4='(0|[1-9][0-9]{0,3})'
+          if [[ ! "$VERSION" =~ ^${NUM4}\.${NUM2}\.${NUM2}(-(alpha|beta|rc)\.${NUM2})?$ ]]; then
+            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH (MINOR and PATCH up to 99), optionally followed by -alpha.N, -beta.N or -rc.N (no leading zeros)"
             exit 1
           fi
           MAJOR=${BASH_REMATCH[1]}; MINOR=${BASH_REMATCH[2]}; PATCH=${BASH_REMATCH[3]}
           LABEL="${BASH_REMATCH[5]}"; NUMBER=${BASH_REMATCH[6]:-0}
-          if (( MAJOR > 20 || MINOR > 999 || PATCH > 999 || NUMBER > 32 )); then
-            echo "::error::Version $VERSION does not fit the versionCode scheme (MAJOR<=20, MINOR<=999, PATCH<=999, pre-release number<=32)"
+          if (( MAJOR > 2099 || NUMBER > 32 )); then
+            echo "::error::Version $VERSION does not fit the versionCode scheme (MAJOR<=2099, MINOR<=99, PATCH<=99, pre-release number<=32)"
             exit 1
           fi
           case "$LABEL" in
@@ -74,7 +75,7 @@ jobs:
             rc) STAGE=$((66 + NUMBER)) ;;
             *) STAGE=99 ;;
           esac
-          VERSION_CODE=$(( MAJOR * 100000000 + MINOR * 100000 + PATCH * 100 + STAGE ))
+          VERSION_CODE=$(( (MAJOR * 10000 + MINOR * 100 + PATCH) * 100 + STAGE ))
           PRERELEASE=false
           [[ -n "$LABEL" ]] && PRERELEASE=true
           {
