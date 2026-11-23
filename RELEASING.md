@@ -54,21 +54,21 @@ and the unit tests, then publishes a signed **App Bundle** as `TeeVClean-<versio
 to GitHub Releases. The workflow fails rather than publishing an unsigned bundle.
 
 The `versionCode` is derived from the tag, so it always increases:
-`MAJOR × 10⁸ + MINOR × 10⁵ + PATCH × 10² + STAGE`. STAGE places pre-releases below their final
+`(MAJOR × 10⁴ + MINOR × 10² + PATCH) × 100 + STAGE`. STAGE places pre-releases below their final
 release, in order, so a beta or release candidate uploaded to Play never blocks the final:
 
 | Tag suffix | STAGE | Example | versionCode |
 | --- | --- | --- | --- |
-| `-alpha.N` (N 0-32) | N | `v1.1.0-alpha.1` | `100100001` |
-| `-beta.N` | 33 + N | `v1.1.0-beta.2` | `100100035` |
-| `-rc.N` | 66 + N | `v1.1.0-rc.1` | `100100067` |
-| none (final) | 99 | `v1.1.0` | `100100099` |
+| `-alpha.N` (N 0-32) | N | `v1.1.0-alpha.1` | `1010001` |
+| `-beta.N` | 33 + N | `v1.1.0-beta.2` | `1010035` |
+| `-rc.N` | 66 + N | `v1.1.0-rc.1` | `1010067` |
+| none (final) | 99 | `v1.1.0` | `1010099` |
 
-MAJOR goes up to 20 and MINOR and PATCH up to 999. The pre-release number is required and no number
-may have a leading zero, so no two tags can share a `versionCode`; any other tag shape fails the
-workflow. Codes
-from this scheme are all higher than the earlier one's (`v1.0.0` was `1000000`), so updates install
-over releases built before the change.
+MAJOR goes up to 2099 and MINOR and PATCH up to 99. The pre-release number is required and no
+number may have a leading zero, so no two tags can share a `versionCode`; any other tag shape fails
+the workflow. Codes continue just above the earlier scheme's (`v1.0.0` was `1000000`; `v1.0.1` is
+`1000199`) and grow by 100 per patch release. Google Play rejects version codes that jump far ahead,
+because they use up its 2,100,000,000 limit, so keep this scheme rather than adding digits.
 
 ```bash
 git tag v1.0.0
