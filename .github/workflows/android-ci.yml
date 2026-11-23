@@ -5,13 +5,21 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A newer push to the same pull request supersedes the run in progress; pushes to main always
+# finish so every commit there keeps a result.
+concurrency:
+  group: android-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v7
@@ -21,19 +29,24 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Grant Execute Permission for Gradlew
-      run: chmod +x gradlew
+    # Caches Gradle state between runs (written from main, read by pull requests) and verifies
+    # gradle-wrapper.jar against Gradle's published checksums before anything runs it.
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v6
 
+    # The same checks the release workflow gates on (release lint, no Gradle warnings), so a
+    # problem shows up on the pull request rather than when a version is tagged.
     - name: Build, test and lint
-      run: ./gradlew assembleDebug testDebugUnitTest lintDebug --console=plain
+      run: ./gradlew assembleDebug testDebugUnitTest lintDebug lintRelease --warning-mode=fail --console=plain
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
       with:
         name: TeeVClean-Debug-APK
         path: app/build/outputs/apk/debug/app-debug.apk
+        if-no-files-found: error
+        retention-days: 14
 
     - name: Upload Build Reports
       if: always()
@@ -42,4 +55,7 @@ jobs:
         name: TeeVClean-Reports
         path: |
           app/build/reports/lint-results-debug.html
+          app/build/reports/lint-results-release.html
           app/build/reports/tests/testDebugUnitTest/
+        if-no-files-found: ignore
+        retention-days: 14
