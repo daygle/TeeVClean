@@ -16,7 +16,8 @@ concurrency:
 jobs:
   release:
     name: Build AAB and publish to GitHub Releases
-    runs-on: ubuntu-latest
+    # Pinned like Android CI, so a runner image change can't alter a release unannounced.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -143,7 +144,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release edit "$TAG" --notes ""
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes ""
             echo "::notice::Release $TAG already existed (re-run/re-fired build); cleared its body so notes regenerate without duplication."
           else
             echo "No existing release for $TAG; creating fresh."
